@@ -1,0 +1,472 @@
+package com.example.airlinesv2
+
+import android.graphics.Color
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Bundle
+import android.util.Log
+import android.util.Size
+import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
+import androidx.annotation.OptIn
+import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.mlkit.vision.barcode.BarcodeScanner
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
+
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var cameraExecutor: ExecutorService
+    private lateinit var barcodeScanner: BarcodeScanner
+    private var scanningPaused = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContentView(R.layout.activity_main)
+
+        val rootLayout = findViewById<androidx.constraintlayout.widget.ConstraintLayout>(R.id.rootLayout)
+        rootLayout.setBackgroundColor(Color.WHITE)
+
+        barcodeScanner = BarcodeScanning.getClient()
+        cameraExecutor = Executors.newSingleThreadExecutor()
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startCamera()
+        } else {
+            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 1)
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.previewView)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+    }
+
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+            val preview = Preview.Builder().build()
+            preview.setSurfaceProvider(findViewById<PreviewView>(R.id.previewView).surfaceProvider)
+
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+            imageAnalysis.setAnalyzer(cameraExecutor, { imageProxy ->
+                if (!scanningPaused) {
+                    processImageProxy(imageProxy)
+                } else {
+                    imageProxy.close()
+                }
+            })
+
+            val cameraSelector = CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build()
+
+            cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    @OptIn(ExperimentalGetImage::class)
+    private fun processImageProxy(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            try {
+                val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+
+                barcodeScanner.process(inputImage)
+                    .addOnSuccessListener { barcodes ->
+                        if (barcodes.isNotEmpty() && !scanningPaused) {
+                            val barcode = barcodes[0]
+                            if (barcode.format != Barcode.FORMAT_PDF417) {
+                                ToneGenerator(
+                                    AudioManager.STREAM_MUSIC,
+                                    ToneGenerator.MAX_VOLUME
+                                ).startTone(
+                                    ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
+                                    150
+                                )
+                                val barcodeValue = barcode.rawValue
+                                val extractedData = barcodeValue?.let { extractBarcodeData(it) }
+                                if (extractedData != null) {
+                                    populateBoardingPass(extractedData)
+                                }
+
+                                scanningPaused = true
+                                extractedData?.let {
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        if (preValidateBarcode(extractedData)) {
+                                            val apiResult = getRequestAsync(it)
+                                            if (apiResult != null) {
+                                                processApiResults(apiResult)
+                                            }
+                                            delay(2000)
+                                            scanningPaused = false
+                                        } else {
+                                            delay(2000)
+                                            scanningPaused = false
+                                        }
+                                    }
+                                } ?: run {
+                                    println("Barcode data extraction failed or barcodeValue is null")
+                                }
+
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("MLKit", "Barcode scanning failed", e)
+                    }
+                    .addOnCompleteListener {
+                        imageProxy.close()
+                    }
+            } catch (e: Exception) {
+                val msg = findViewById<TextView>(R.id.validationMessage)
+                msg.text = "Error scanning barcode"
+                validationUIResponse(false)
+                imageProxy.close()
+            }
+        } else {
+            Log.e("ImageProxyError", "MediaImage is null")
+            imageProxy.close()
+        }
+    }
+
+    fun preValidateBarcode(barcode: BarcodeData?): Boolean {
+        scanningPaused = true
+        // Ensure barcode is not null
+        if (barcode != null) {
+            // Get the current date
+            val currentDate = LocalDate.now()
+
+            // Compare only the date part of the flightDate
+            if (barcode.flightDate.isBefore(currentDate)) {
+                // If the flight date has passed, show the message
+                val msg = findViewById<TextView>(R.id.validationMessage)
+                msg.text = "Expired boarding pass!"
+
+                validationUIResponse(false)
+
+                return false
+            }
+        }
+        return true
+    }
+
+
+    fun processApiResults(jsonResponse: String){
+        // process here
+        val jsonObject = Json.parseToJsonElement(jsonResponse).jsonObject
+
+        val departureDate = getDepartureDateLocal(jsonResponse) ?: ""
+        val airport = getDepartureAirportFsCode(jsonResponse) ?: ""
+        val terminal = getDepartureTerminal(jsonResponse) ?: ""
+        val flightIata = getFlightIata(jsonResponse) ?: ""
+
+        populateFlightDetails(flightIata, departureDate, airport, terminal)
+
+        val errorMsg = airport?.let {
+            if (departureDate != null) {
+                validateFlight(it, departureDate)
+            } else {
+                "Error during scan"
+            }
+        }
+
+        if (!errorMsg.isNullOrEmpty()) {
+            val msg = findViewById<TextView>(R.id.validationMessage)
+            msg.text = errorMsg
+            validationUIResponse(false)
+        }else{
+            val msg = findViewById<TextView>(R.id.validationMessage)
+            msg.text = "Flight is within 24 hours!"
+            validationUIResponse(true)
+        }
+
+        //populateFlightDetails(departureDate, airport, terminal)
+    }
+
+    fun getDepartureDateLocal(jsonString: String): String? {
+        // Parse the JSON string
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+
+        // Access the "flightStatuses" array
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
+        // Ensure the array is not empty
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val firstFlightStatus = flightStatuses[0].jsonObject
+            val departureDate = firstFlightStatus["departureDate"]?.jsonObject
+            return departureDate?.get("dateLocal")?.toString()?.trim('"')
+        }
+
+        return null
+    }
+
+    fun getDepartureAirportFsCode(jsonString: String): String? {
+        // Parse the JSON string
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+
+        // Access the "flightStatuses" array
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
+        // Ensure the array is not empty
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val firstFlightStatus = flightStatuses[0].jsonObject
+            return firstFlightStatus["departureAirportFsCode"]?.toString()?.trim('"')
+        }
+
+        return null
+    }
+
+    fun getDepartureTerminal(jsonString: String): String? {
+        // Parse the JSON string
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+
+        // Access the "flightStatuses" array
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
+        // Ensure the array is not empty
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val firstFlightStatus = flightStatuses[0].jsonObject
+            val airportResources = firstFlightStatus["airportResources"]?.jsonObject
+            return airportResources?.get("departureTerminal")?.toString()?.trim('"')
+        }
+
+        return null
+    }
+
+    fun getFlightIata(jsonString: String): String? {
+        // Parse the JSON string
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+
+        // Access the "flightStatuses" array
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
+        // Ensure the array is not empty
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val firstFlightStatus = flightStatuses[0].jsonObject
+
+            // Access "carrierFsCode" and "flightNumber" directly
+            val carrierFsCode = firstFlightStatus["carrierFsCode"]?.jsonPrimitive?.content
+            val flightNumber = firstFlightStatus["flightNumber"]?.jsonPrimitive?.content
+
+            return if (carrierFsCode != null && flightNumber != null) {
+                "$carrierFsCode $flightNumber"
+            } else {
+                null
+            }
+        }
+
+        return null
+    }
+
+    fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String): String {
+        return try {
+            // Check if departure is from SIN
+            if (departureAirportFsCode != "SIN") {
+                return "Alert: Departure is not from SIN!"
+            }
+
+            // Parse the scheduledDepartureDate into LocalDateTime
+            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+            val flightDateTime = LocalDateTime.parse(scheduledDepartureDate, formatter)
+
+            // Current time
+            val currentTime = LocalDateTime.now()
+
+            // Calculate time difference in seconds
+            val timeDifference = ChronoUnit.SECONDS.between(currentTime, flightDateTime)
+
+            when {
+                timeDifference < 0 -> {
+                    "Alert: The flight has already departed! (Flight Time: ${flightDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))})"
+                }
+                timeDifference > 86400 -> {
+                    "Alert: Flight is not within the next 24 hours! (Flight Time: ${flightDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))}, " +
+                            "Current Time: ${currentTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))})"
+                }
+                else -> {
+                    "" // Flight is valid
+                }
+            }
+        } catch (ex: Exception) {
+            "Internal Server Error Occurred"
+        }
+    }
+
+    fun populateBoardingPass(data: BarcodeData) {
+            val flightIata = findViewById<TextView>(R.id.flightIata)
+            flightIata.text = "Flight IATA: ${data.flightIata}"
+
+            val formattedFlightDate =
+                data.flightDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+
+            val departureDate = findViewById<TextView>(R.id.departureDate)
+            departureDate.text = "Departure Date: $formattedFlightDate"
+    }
+
+    fun populateFlightDetails(flightIata: String, departureDateLocal: String, airport: String, terminal: String) {
+        // Parse the departureDateLocal into a LocalDateTime object
+        val inputFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS") // Adjust to your input format
+        val outputFormat = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm") // Desired output format
+        val departureDateTime = LocalDateTime.parse(departureDateLocal, inputFormat)
+
+        // Format the LocalDateTime object to the desired format
+        val formattedDepartureTime = departureDateTime.format(outputFormat)
+
+        // Set the formatted departure time to the TextView
+        //val apiflightIata = findViewById<TextView>(R.id.apiflightIata)
+        //apiflightIata.text = "Flight IATA: $flightIata"
+
+        // Set the formatted departure time to the TextView
+        val departureTime = findViewById<TextView>(R.id.departureTime)
+        departureTime.text = "Departure Date: $formattedDepartureTime"
+
+        // Set other details
+        val flightAirport = findViewById<TextView>(R.id.flightAirport)
+        flightAirport.text = "Airport: $airport"
+
+        val flightTerminal = findViewById<TextView>(R.id.flightTerminal)
+        flightTerminal.text = "Terminal: $terminal"
+    }
+
+    fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
+        try {
+            // Extract data from the barcode
+            val passengerName = encodedBarcode.substring(2, 22).trim()
+            val airlineCode = encodedBarcode.substring(36, 39).trim()
+            val flightNumber = encodedBarcode.substring(39, 44).trim()
+            val julianDate = encodedBarcode.substring(44, 47).toInt()
+            val seatNumber = encodedBarcode.substring(48, 51).trim()
+
+            // Get the current year
+            val currentYear = LocalDate.now().year
+
+            // Calculate the flight date from the Julian date
+            val flightDate = LocalDate.ofYearDay(currentYear, julianDate)
+
+            // Construct IATA flight code
+            val flightIata = "$airlineCode${flightNumber.trimStart('0')}"
+
+            // Return a BarcodeData instance
+            return BarcodeData(
+                passengerName = passengerName,
+                airlineCode = airlineCode,
+                flightNumber = flightNumber,
+                flightDate = flightDate,
+                seatNumber = seatNumber,
+                flightIata = flightIata
+            )
+        } catch (e: Exception) {
+            val msg = findViewById<TextView>(R.id.validationMessage)
+            msg.text = "Error scanning barcode!"
+            validationUIResponse(false)
+            scanningPaused = false
+            return  null
+        }
+    }
+
+    fun validationUIResponse(valid: Boolean) {
+        val rootLayout =
+            findViewById<androidx.constraintlayout.widget.ConstraintLayout>(
+                R.id.rootLayout
+            )
+
+        if (valid) {
+            rootLayout.setBackgroundColor(Color.GREEN)
+
+        } else {
+            rootLayout.setBackgroundColor(Color.RED)
+        }
+    }
+
+    suspend fun getRequestAsync(request: BarcodeData): String? {
+        val appId = "6acd1100"
+        val appKey = "a287bbec7d155e99d39eae55fe341828"
+
+        val currentDate = LocalDate.now()
+        val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
+        val strDate = currentDate.format(dateFormat)
+        val url =
+            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=true"
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connect()
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
+                    // Return the raw JSON string instead of deserializing
+                    jsonString
+                } else {
+                    println("\tERROR: Response Code ${connection.responseCode}")
+                    null
+                }
+            } catch (e: Exception) {
+                println("\tERROR: ${e.message}")
+                null
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                startCamera()
+            } else {
+                Log.e("Permission", "Camera permission denied")
+            }
+        }
+    }
+}
+
+data class BarcodeData(
+    val passengerName: String,
+    val airlineCode: String,
+    val flightNumber: String,
+    val flightDate: LocalDate,
+    val seatNumber: String,
+    val flightIata: String
+)
