@@ -80,7 +80,6 @@ class MainActivity : AppCompatActivity() {
             preview.setSurfaceProvider(findViewById<PreviewView>(R.id.previewView).surfaceProvider)
 
             val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
             imageAnalysis.setAnalyzer(cameraExecutor, { imageProxy ->
                 if (!scanningPaused) {
@@ -101,15 +100,16 @@ class MainActivity : AppCompatActivity() {
     @OptIn(ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
+
         if (mediaImage != null) {
             try {
                 val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
                 barcodeScanner.process(inputImage)
                     .addOnSuccessListener { barcodes ->
-                        if (barcodes.isNotEmpty() && !scanningPaused) {
+                        if (barcodes.isNotEmpty()) {
                             val barcode = barcodes[0]
-                            if (barcode.format != Barcode.FORMAT_PDF417) {
+                            if (barcode.format != Barcode.FORMAT_QR_CODE) {
                                 ToneGenerator(
                                     AudioManager.STREAM_MUSIC,
                                     ToneGenerator.MAX_VOLUME
@@ -117,10 +117,14 @@ class MainActivity : AppCompatActivity() {
                                     ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
                                     150
                                 )
-                                val barcodeValue = barcode.rawValue
+
+                                val barcodeValue = barcode.rawValue ?: barcode.displayValue
                                 val extractedData = barcodeValue?.let { extractBarcodeData(it) }
                                 if (extractedData != null) {
                                     populateBoardingPass(extractedData)
+                                } else{
+                                    scanningPaused = false
+                                    return@addOnSuccessListener
                                 }
 
                                 scanningPaused = true
@@ -153,8 +157,10 @@ class MainActivity : AppCompatActivity() {
                     }
             } catch (e: Exception) {
                 val msg = findViewById<TextView>(R.id.validationMessage)
-                msg.text = "Error scanning barcode"
+                msg.text = "Error scanning barcode!"
                 validationUIResponse(false)
+                scanningPaused = false
+                clearFlightDetails()
                 imageProxy.close()
             }
         } else {
@@ -175,9 +181,8 @@ class MainActivity : AppCompatActivity() {
                 // If the flight date has passed, show the message
                 val msg = findViewById<TextView>(R.id.validationMessage)
                 msg.text = "Expired boarding pass!"
-
                 validationUIResponse(false)
-
+                clearFlightDetails()
                 return false
             }
         }
@@ -362,6 +367,18 @@ class MainActivity : AppCompatActivity() {
         flightTerminal.text = "Terminal: $terminal"
     }
 
+
+    fun clearFlightDetails() {
+        val departureTime = findViewById<TextView>(R.id.departureTime)
+        departureTime.text = "Departure Date: "
+
+        val flightAirport = findViewById<TextView>(R.id.flightAirport)
+        flightAirport.text = "Airport:"
+
+        val flightTerminal = findViewById<TextView>(R.id.flightTerminal)
+        flightTerminal.text = "Terminal:"
+    }
+
     fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
         try {
             // Extract data from the barcode
@@ -390,10 +407,10 @@ class MainActivity : AppCompatActivity() {
                 flightIata = flightIata
             )
         } catch (e: Exception) {
-            val msg = findViewById<TextView>(R.id.validationMessage)
-            msg.text = "Error scanning barcode!"
-            validationUIResponse(false)
             scanningPaused = false
+            val msg = findViewById<TextView>(R.id.validationMessage)
+            msg.text = "Error scanning barcode: $encodedBarcode"
+            validationUIResponse(false)
             return  null
         }
     }
