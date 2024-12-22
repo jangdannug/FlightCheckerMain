@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
                                         if (preValidateBarcode(extractedData)) {
                                             val apiResult = getRequestAsync(it)
                                             if (apiResult != null) {
-                                                processApiResults(apiResult)
+                                                processApiResults(apiResult,extractedData.flightDate)
                                             }
                                             delay(2000)
                                             scanningPaused = false
@@ -189,37 +189,41 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-
-    fun processApiResults(jsonResponse: String){
-        // process here
+    fun processApiResults(jsonResponse: String, ticketDate: LocalDate) {
         val jsonObject = Json.parseToJsonElement(jsonResponse).jsonObject
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
 
-        val departureDate = getDepartureDateLocal(jsonResponse) ?: ""
-        val airport = getDepartureAirportFsCode(jsonResponse) ?: ""
-        val terminal = getDepartureTerminal(jsonResponse) ?: ""
-        val flightIata = getFlightIata(jsonResponse) ?: ""
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val departureDate = getDepartureDateLocal(jsonResponse) ?: ""
+            val airport = getDepartureAirportFsCode(jsonResponse) ?: ""
+            val terminal = getDepartureTerminal(jsonResponse) ?: ""
+            val flightIata = getFlightIata(jsonResponse) ?: ""
 
-        populateFlightDetails(flightIata, departureDate, airport, terminal)
+            populateFlightDetails(flightIata, departureDate, airport, terminal)
 
-        val errorMsg = airport?.let {
-            if (departureDate != null) {
-                validateFlight(it, departureDate)
-            } else {
-                "Error during scan"
+            val errorMsg = airport?.let {
+                if (departureDate != null) {
+                    validateFlight(it, departureDate, ticketDate)
+                } else {
+                    "Error during scan"
+                }
             }
-        }
 
-        if (!errorMsg.isNullOrEmpty()) {
+            if (!errorMsg.isNullOrEmpty()) {
+                val msg = findViewById<TextView>(R.id.validationMessage)
+                msg.text = errorMsg
+                validationUIResponse(false)
+            } else {
+                val msg = findViewById<TextView>(R.id.validationMessage)
+                msg.text = "Flight is within 24 hours!"
+                validationUIResponse(true)
+            }
+        } else {
             val msg = findViewById<TextView>(R.id.validationMessage)
-            msg.text = errorMsg
+            msg.text = "No record found!"
             validationUIResponse(false)
-        }else{
-            val msg = findViewById<TextView>(R.id.validationMessage)
-            msg.text = "Flight is within 24 hours!"
-            validationUIResponse(true)
+            clearFlightDetails()
         }
-
-        //populateFlightDetails(departureDate, airport, terminal)
     }
 
     fun getDepartureDateLocal(jsonString: String): String? {
@@ -297,34 +301,33 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String): String {
+    fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String, ticketDate: LocalDate ): String {
         return try {
             // Check if departure is from SIN
             if (departureAirportFsCode != "SIN") {
                 return "Alert: Departure is not from SIN!"
             }
 
-            // Parse the scheduledDepartureDate into LocalDateTime
+            // Define the formatter to parse the input date
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
-            val flightDateTime = LocalDateTime.parse(scheduledDepartureDate, formatter)
+            // Parse the input date string into a LocalDateTime object
+            val apiDepDate = LocalDateTime.parse(scheduledDepartureDate, formatter)
+            // Get the current date and time
+            val currentDate = LocalDateTime.now()
 
-            // Current time
-            val currentTime = LocalDateTime.now()
+            // Check if the input date is in the past
+            if (apiDepDate.isBefore(currentDate) || apiDepDate.toLocalDate().isAfter(ticketDate)) {
+                return "Alert: The flight has already departed!"
+            }
 
-            // Calculate time difference in seconds
-            val timeDifference = ChronoUnit.SECONDS.between(currentTime, flightDateTime)
+            // Calculate the difference in hours
+            val hoursDifference = ChronoUnit.HOURS.between(currentDate, apiDepDate)
 
-            when {
-                timeDifference < 0 -> {
-                    "Alert: The flight has already departed! (Flight Time: ${flightDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))})"
-                }
-                timeDifference > 86400 -> {
-                    "Alert: Flight is not within the next 24 hours! (Flight Time: ${flightDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))}, " +
-                            "Current Time: ${currentTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))})"
-                }
-                else -> {
-                    "" // Flight is valid
-                }
+            // Check if the difference is within 24 hours
+            return if (hoursDifference in 0..24) {
+                ""
+            } else {
+                "The flight is NOT within 24 hours."
             }
         } catch (ex: Exception) {
             "Internal Server Error Occurred"
@@ -367,6 +370,13 @@ class MainActivity : AppCompatActivity() {
         flightTerminal.text = "Terminal: $terminal"
     }
 
+    fun clearTicketDetails() {
+        val departureTime = findViewById<TextView>(R.id.flightIata)
+        departureTime.text = "Flight IATA: "
+
+        val flightAirport = findViewById<TextView>(R.id.departureDate)
+        flightAirport.text = "Boarding Date: "
+    }
 
     fun clearFlightDetails() {
         val departureTime = findViewById<TextView>(R.id.departureTime)
@@ -411,6 +421,10 @@ class MainActivity : AppCompatActivity() {
             val msg = findViewById<TextView>(R.id.validationMessage)
             msg.text = "Error scanning barcode: $encodedBarcode"
             validationUIResponse(false)
+
+            clearFlightDetails()
+            clearTicketDetails()
+
             return  null
         }
     }
@@ -433,9 +447,9 @@ class MainActivity : AppCompatActivity() {
         val appId = "6acd1100"
         val appKey = "a287bbec7d155e99d39eae55fe341828"
 
-        val currentDate = LocalDate.now()
+        val ticketDate = request.flightDate
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
-        val strDate = currentDate.format(dateFormat)
+        val strDate = ticketDate.format(dateFormat)
         val url =
             "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=true"
 
