@@ -156,11 +156,8 @@ class MainActivity : AppCompatActivity() {
                         imageProxy.close()
                     }
             } catch (e: Exception) {
-                val msg = findViewById<TextView>(R.id.validationMessage)
-                msg.text = "Error scanning barcode!"
                 validationUIResponse(false)
                 scanningPaused = false
-                clearFlightDetails()
                 imageProxy.close()
             }
         } else {
@@ -178,11 +175,7 @@ class MainActivity : AppCompatActivity() {
 
             // Compare only the date part of the flightDate
             if (barcode.flightDate.isBefore(currentDate)) {
-                // If the flight date has passed, show the message
-                val msg = findViewById<TextView>(R.id.validationMessage)
-                msg.text = "Expired boarding pass!"
                 validationUIResponse(false)
-                clearFlightDetails()
                 return false
             }
         }
@@ -196,10 +189,6 @@ class MainActivity : AppCompatActivity() {
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
             val departureDate = getDepartureDateLocal(jsonResponse) ?: ""
             val airport = getDepartureAirportFsCode(jsonResponse) ?: ""
-            val terminal = getDepartureTerminal(jsonResponse) ?: ""
-            val flightIata = getFlightIata(jsonResponse) ?: ""
-
-            populateFlightDetails(flightIata, departureDate, airport, terminal)
 
             val errorMsg = airport?.let {
                 if (departureDate != null) {
@@ -210,91 +199,61 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (!errorMsg.isNullOrEmpty()) {
-                val msg = findViewById<TextView>(R.id.validationMessage)
-                msg.text = errorMsg
                 validationUIResponse(false)
             } else {
-                val msg = findViewById<TextView>(R.id.validationMessage)
-                msg.text = "Flight is within 24 hours!"
                 validationUIResponse(true)
             }
+
         } else {
-            val msg = findViewById<TextView>(R.id.validationMessage)
-            msg.text = "No record found!"
             validationUIResponse(false)
-            clearFlightDetails()
         }
     }
 
     fun getDepartureDateLocal(jsonString: String): String? {
-        // Parse the JSON string
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-
-        // Access the "flightStatuses" array
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        // Ensure the array is not empty
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val firstFlightStatus = flightStatuses[0].jsonObject
-            val departureDate = firstFlightStatus["departureDate"]?.jsonObject
-            return departureDate?.get("dateLocal")?.toString()?.trim('"')
+            val matchingFlight = if (flightStatuses.size > 1) {
+                flightStatuses.find {
+                    it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
+                }
+            } else {
+                null
+            }
+
+            if (matchingFlight != null) {
+                val flightStatus = matchingFlight.jsonObject
+                val departureDate = flightStatus["departureDate"]?.jsonObject
+                return departureDate?.get("dateLocal")?.toString()?.trim('"')
+            } else {
+                val flightStatus = flightStatuses[0].jsonObject
+                val departureDate = flightStatus["departureDate"]?.jsonObject
+                return departureDate?.get("dateLocal")?.toString()?.trim('"')
+            }
+
         }
 
         return null
     }
 
     fun getDepartureAirportFsCode(jsonString: String): String? {
-        // Parse the JSON string
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-
-        // Access the "flightStatuses" array
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        // Ensure the array is not empty
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val firstFlightStatus = flightStatuses[0].jsonObject
-            return firstFlightStatus["departureAirportFsCode"]?.toString()?.trim('"')
-        }
-
-        return null
-    }
-
-    fun getDepartureTerminal(jsonString: String): String? {
-        // Parse the JSON string
-        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-
-        // Access the "flightStatuses" array
-        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        // Ensure the array is not empty
-        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val firstFlightStatus = flightStatuses[0].jsonObject
-            val airportResources = firstFlightStatus["airportResources"]?.jsonObject
-            return airportResources?.get("departureTerminal")?.toString()?.trim('"')
-        }
-
-        return null
-    }
-
-    fun getFlightIata(jsonString: String): String? {
-        // Parse the JSON string
-        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-
-        // Access the "flightStatuses" array
-        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        // Ensure the array is not empty
-        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val firstFlightStatus = flightStatuses[0].jsonObject
-
-            // Access "carrierFsCode" and "flightNumber" directly
-            val carrierFsCode = firstFlightStatus["carrierFsCode"]?.jsonPrimitive?.content
-            val flightNumber = firstFlightStatus["flightNumber"]?.jsonPrimitive?.content
-
-            return if (carrierFsCode != null && flightNumber != null) {
-                "$carrierFsCode $flightNumber"
+            val matchingFlight = if (flightStatuses.size > 1) {
+                flightStatuses.find {
+                    it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
+                }
             } else {
                 null
+            }
+
+            if (matchingFlight != null) {
+                val flightStatus = matchingFlight.jsonObject
+                return flightStatus["departureAirportFsCode"]?.toString()?.trim('"')
+            } else {
+                val flightStatus = flightStatuses[0].jsonObject
+                return flightStatus["departureAirportFsCode"]?.toString()?.trim('"')
             }
         }
 
@@ -345,48 +304,12 @@ class MainActivity : AppCompatActivity() {
             departureDate.text = "Departure Date: $formattedFlightDate"
     }
 
-    fun populateFlightDetails(flightIata: String, departureDateLocal: String, airport: String, terminal: String) {
-        // Parse the departureDateLocal into a LocalDateTime object
-        val inputFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS") // Adjust to your input format
-        val outputFormat = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm") // Desired output format
-        val departureDateTime = LocalDateTime.parse(departureDateLocal, inputFormat)
-
-        // Format the LocalDateTime object to the desired format
-        val formattedDepartureTime = departureDateTime.format(outputFormat)
-
-        // Set the formatted departure time to the TextView
-        //val apiflightIata = findViewById<TextView>(R.id.apiflightIata)
-        //apiflightIata.text = "Flight IATA: $flightIata"
-
-        // Set the formatted departure time to the TextView
-        val departureTime = findViewById<TextView>(R.id.departureTime)
-        departureTime.text = "Departure Date: $formattedDepartureTime"
-
-        // Set other details
-        val flightAirport = findViewById<TextView>(R.id.flightAirport)
-        flightAirport.text = "Airport: $airport"
-
-        val flightTerminal = findViewById<TextView>(R.id.flightTerminal)
-        flightTerminal.text = "Terminal: $terminal"
-    }
-
     fun clearTicketDetails() {
         val departureTime = findViewById<TextView>(R.id.flightIata)
         departureTime.text = "Flight IATA: "
 
         val flightAirport = findViewById<TextView>(R.id.departureDate)
         flightAirport.text = "Boarding Date: "
-    }
-
-    fun clearFlightDetails() {
-        val departureTime = findViewById<TextView>(R.id.departureTime)
-        departureTime.text = "Departure Date: "
-
-        val flightAirport = findViewById<TextView>(R.id.flightAirport)
-        flightAirport.text = "Airport:"
-
-        val flightTerminal = findViewById<TextView>(R.id.flightTerminal)
-        flightTerminal.text = "Terminal:"
     }
 
     fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
@@ -417,14 +340,8 @@ class MainActivity : AppCompatActivity() {
                 flightIata = flightIata
             )
         } catch (e: Exception) {
-            scanningPaused = false
-            val msg = findViewById<TextView>(R.id.validationMessage)
-            msg.text = "Error scanning barcode: $encodedBarcode"
             validationUIResponse(false)
-
-            clearFlightDetails()
             clearTicketDetails()
-
             return  null
         }
     }
@@ -436,9 +353,13 @@ class MainActivity : AppCompatActivity() {
             )
 
         if (valid) {
+            val validationMsg = findViewById<TextView>(R.id.validationMsg)
+            validationMsg.text = "GO!"
             rootLayout.setBackgroundColor(Color.GREEN)
 
         } else {
+            val validationMsg = findViewById<TextView>(R.id.validationMsg)
+            validationMsg.text = "STOP!"
             rootLayout.setBackgroundColor(Color.RED)
         }
     }
@@ -447,7 +368,11 @@ class MainActivity : AppCompatActivity() {
         val appId = "6acd1100"
         val appKey = "a287bbec7d155e99d39eae55fe341828"
 
-        val ticketDate = request.flightDate
+        val currentDate = LocalDate.now()
+        var ticketDate = request.flightDate
+        if (ticketDate.isAfter(currentDate)) {
+            ticketDate = ticketDate.minusDays(1)
+        }
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         val strDate = ticketDate.format(dateFormat)
         val url =
