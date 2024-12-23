@@ -4,6 +4,8 @@ import android.graphics.Color
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.Size
 import android.widget.TextView
@@ -36,7 +38,8 @@ import java.net.URL
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.*
-
+import java.text.SimpleDateFormat
+import java.util.*
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
@@ -44,14 +47,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var barcodeScanner: BarcodeScanner
     private var scanningPaused = false
+    private lateinit var currentTimeClock: TextView
+    private lateinit var advanceTimeClock: TextView
+    private val handler = Handler(Looper.getMainLooper())
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+    private val dateTimeFormat = SimpleDateFormat("dd MMM yyyy hh:mm a", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-        val rootLayout = findViewById<androidx.constraintlayout.widget.ConstraintLayout>(R.id.rootLayout)
-        rootLayout.setBackgroundColor(Color.WHITE)
+        clearDetails()
+
+        currentTimeClock = findViewById(R.id.currentTimeClock)
+        advanceTimeClock = findViewById(R.id.advanceTimeClock)
+        startClocks()
 
         barcodeScanner = BarcodeScanning.getClient()
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -110,17 +122,17 @@ class MainActivity : AppCompatActivity() {
                         if (barcodes.isNotEmpty()) {
                             val barcode = barcodes[0]
                             if (barcode.format != Barcode.FORMAT_QR_CODE) {
-                                ToneGenerator(
-                                    AudioManager.STREAM_MUSIC,
-                                    ToneGenerator.MAX_VOLUME
-                                ).startTone(
-                                    ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
-                                    150
-                                )
-
                                 val barcodeValue = barcode.rawValue ?: barcode.displayValue
                                 val extractedData = barcodeValue?.let { extractBarcodeData(it) }
                                 if (extractedData != null) {
+                                    ToneGenerator(
+                                        AudioManager.STREAM_MUSIC,
+                                        ToneGenerator.MAX_VOLUME
+                                    ).startTone(
+                                        ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
+                                        150
+                                    )
+
                                     populateBoardingPass(extractedData)
                                 } else{
                                     scanningPaused = false
@@ -135,22 +147,24 @@ class MainActivity : AppCompatActivity() {
                                             if (apiResult != null) {
                                                 processApiResults(apiResult,extractedData.flightDate)
                                             }
-                                            delay(2000)
+                                            delay(3000)
                                             scanningPaused = false
+                                            clearDetails()
                                         } else {
-                                            delay(2000)
+                                            delay(3000)
                                             scanningPaused = false
+                                            clearDetails()
                                         }
                                     }
                                 } ?: run {
-                                    println("Barcode data extraction failed or barcodeValue is null")
+                                    //clearDetails()
                                 }
 
                             }
                         }
                     }
                     .addOnFailureListener { e ->
-                        Log.e("MLKit", "Barcode scanning failed", e)
+                        //clearDetails()
                     }
                     .addOnCompleteListener {
                         imageProxy.close()
@@ -158,11 +172,13 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 validationUIResponse(false)
                 scanningPaused = false
+                clearDetails()
                 imageProxy.close()
             }
         } else {
             Log.e("ImageProxyError", "MediaImage is null")
             imageProxy.close()
+            //clearDetails()
         }
     }
 
@@ -213,12 +229,8 @@ class MainActivity : AppCompatActivity() {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = if (flightStatuses.size > 1) {
-                flightStatuses.find {
-                    it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
-                }
-            } else {
-                null
+            val matchingFlight = flightStatuses.lastOrNull {
+                it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
             }
 
             if (matchingFlight != null) {
@@ -226,9 +238,7 @@ class MainActivity : AppCompatActivity() {
                 val departureDate = flightStatus["departureDate"]?.jsonObject
                 return departureDate?.get("dateLocal")?.toString()?.trim('"')
             } else {
-                val flightStatus = flightStatuses[0].jsonObject
-                val departureDate = flightStatus["departureDate"]?.jsonObject
-                return departureDate?.get("dateLocal")?.toString()?.trim('"')
+                return null
             }
 
         }
@@ -240,20 +250,15 @@ class MainActivity : AppCompatActivity() {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = if (flightStatuses.size > 1) {
-                flightStatuses.find {
-                    it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
-                }
-            } else {
-                null
+            val matchingFlight = flightStatuses.lastOrNull {
+                it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
             }
 
             if (matchingFlight != null) {
                 val flightStatus = matchingFlight.jsonObject
                 return flightStatus["departureAirportFsCode"]?.toString()?.trim('"')
             } else {
-                val flightStatus = flightStatuses[0].jsonObject
-                return flightStatus["departureAirportFsCode"]?.toString()?.trim('"')
+              return null
             }
         }
 
@@ -275,7 +280,7 @@ class MainActivity : AppCompatActivity() {
             val currentDate = LocalDateTime.now()
 
             // Check if the input date is in the past
-            if (apiDepDate.isBefore(currentDate) || apiDepDate.toLocalDate().isAfter(ticketDate)) {
+            if (apiDepDate.isBefore(currentDate) || apiDepDate.toLocalDate().isBefore(ticketDate)) {
                 return "Alert: The flight has already departed!"
             }
 
@@ -304,12 +309,18 @@ class MainActivity : AppCompatActivity() {
             departureDate.text = "Departure Date: $formattedFlightDate"
     }
 
-    fun clearTicketDetails() {
+    fun clearDetails() {
         val departureTime = findViewById<TextView>(R.id.flightIata)
         departureTime.text = "Flight IATA: "
 
         val flightAirport = findViewById<TextView>(R.id.departureDate)
         flightAirport.text = "Boarding Date: "
+
+        val rootLayout =
+            findViewById<androidx.constraintlayout.widget.ConstraintLayout>(R.id.rootLayout)
+        rootLayout.setBackgroundColor(Color.WHITE)
+        val validationMsg = findViewById<TextView>(R.id.validationMsg)
+        validationMsg.text = ""
     }
 
     fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
@@ -341,7 +352,7 @@ class MainActivity : AppCompatActivity() {
             )
         } catch (e: Exception) {
             validationUIResponse(false)
-            clearTicketDetails()
+            clearDetails()
             return  null
         }
     }
@@ -356,12 +367,12 @@ class MainActivity : AppCompatActivity() {
             val validationMsg = findViewById<TextView>(R.id.validationMsg)
             validationMsg.text = "GO!"
             rootLayout.setBackgroundColor(Color.GREEN)
-
         } else {
             val validationMsg = findViewById<TextView>(R.id.validationMsg)
             validationMsg.text = "STOP!"
             rootLayout.setBackgroundColor(Color.RED)
         }
+
     }
 
     suspend fun getRequestAsync(request: BarcodeData): String? {
@@ -376,7 +387,7 @@ class MainActivity : AppCompatActivity() {
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         val strDate = ticketDate.format(dateFormat)
         val url =
-            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=true"
+            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=true&airport=SIN"
 
         return withContext(Dispatchers.IO) {
             try {
@@ -398,6 +409,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun startClocks() {
+        handler.post(object : Runnable {
+            override fun run() {
+                val now = Calendar.getInstance()
+
+                val currentTime = dateTimeFormat.format(now.time)
+                currentTimeClock.text = "Current Time: $currentTime"
+
+                now.add(Calendar.HOUR_OF_DAY, 24)
+                val advanceTime = dateTimeFormat.format(now.time)
+                advanceTimeClock.text = "24 Hours: $advanceTime"
+
+                handler.postDelayed(this, 1000) // Update every second
+            }
+        })
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()

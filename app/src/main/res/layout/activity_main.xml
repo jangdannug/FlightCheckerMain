@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/rootLayout"
@@ -15,14 +16,14 @@
         android:layout_marginTop="50dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Boarding Pass Validator Text -->
     <TextView
         android:id="@+id/boardingPassValidatorTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Boarding Pass Validator"
+        android:text="Flight Validity Check"
         android:textSize="20sp"
         android:textStyle="bold"
         android:gravity="center"
@@ -37,7 +38,7 @@
         android:id="@+id/versionText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="v4.0.0.0"
+        android:text="v5.0.0.0"
         android:textSize="10sp"
         android:gravity="center"
         android:textColor="#000000"
@@ -101,5 +102,33 @@
         app:layout_constraintTop_toBottomOf="@id/departureDate"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Current Time Clock -->
+    <TextView
+        android:id="@+id/currentTimeClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="20sp"
+        android:gravity="center"
+        android:textColor="#000000"
+        app:layout_constraintBottom_toTopOf="@+id/advanceTimeClock"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="10dp" />
+
+    <!-- Maximum Allowed Entry Time Clock -->
+    <TextView
+        android:id="@+id/advanceTimeClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="20sp"
+        android:gravity="center"
+        android:textColor="#000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="70dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
