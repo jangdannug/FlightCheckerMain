@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = flightStatuses.lastOrNull {
+            val matchingFlight = flightStatuses.firstOrNull {
                 it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
             }
 
@@ -250,7 +250,7 @@ class MainActivity : AppCompatActivity() {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = flightStatuses.lastOrNull {
+            val matchingFlight = flightStatuses.firstOrNull() {
                 it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
             }
 
@@ -284,11 +284,9 @@ class MainActivity : AppCompatActivity() {
                 return "Alert: The flight has already departed!"
             }
 
-            // Calculate the difference in hours
-            val hoursDifference = ChronoUnit.HOURS.between(currentDate, apiDepDate)
+            val minutesDifference = ChronoUnit.MINUTES.between(currentDate, apiDepDate)
 
-            // Check if the difference is within 24 hours
-            return if (hoursDifference in 0..24) {
+            return if (minutesDifference in 0..1440) {
                 ""
             } else {
                 "The flight is NOT within 24 hours."
@@ -381,13 +379,13 @@ class MainActivity : AppCompatActivity() {
 
         val currentDate = LocalDate.now()
         var ticketDate = request.flightDate
-        if (ticketDate.isAfter(currentDate)) {
-            ticketDate = ticketDate.minusDays(1)
-        }
+        //if (ticketDate.isAfter(currentDate)) {
+         //   ticketDate = ticketDate.minusDays(1)
+        //}
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         val strDate = ticketDate.format(dateFormat)
         val url =
-            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=true&airport=SIN"
+            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=false&airport=SIN&extendedOptions=status=Departed"
 
         return withContext(Dispatchers.IO) {
             try {
@@ -416,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                 val now = Calendar.getInstance()
 
                 val currentTime = dateTimeFormat.format(now.time)
-                currentTimeClock.text = "Current Time: $currentTime"
+                currentTimeClock.text = ""
 
                 now.add(Calendar.HOUR_OF_DAY, 24)
                 val advanceTime = dateTimeFormat.format(now.time)
