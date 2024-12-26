@@ -184,6 +184,7 @@ class MainActivity : AppCompatActivity() {
 
     fun preValidateBarcode(barcode: BarcodeData?): Boolean {
         scanningPaused = true
+
         // Ensure barcode is not null
         if (barcode != null) {
             // Get the current date
@@ -191,6 +192,16 @@ class MainActivity : AppCompatActivity() {
 
             // Compare only the date part of the flightDate
             if (barcode.flightDate.isBefore(currentDate)) {
+                validationUIResponse(false)
+                return false
+            }
+
+            if(barcode.seatNumber.isNullOrEmpty()){
+                validationUIResponse(false)
+                return false
+            }
+
+            if(barcode.seatNumber == "000"){
                 validationUIResponse(false)
                 return false
             }
@@ -203,8 +214,8 @@ class MainActivity : AppCompatActivity() {
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
 
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val departureDate = getDepartureDateLocal(jsonResponse) ?: ""
-            val airport = getDepartureAirportFsCode(jsonResponse) ?: ""
+            val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
+            val airport = getDepartureAirportFsCode(jsonResponse, ticketDate) ?: ""
 
             val errorMsg = airport?.let {
                 if (departureDate != null) {
@@ -225,33 +236,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getDepartureDateLocal(jsonString: String): String? {
+    fun getDepartureDateLocal(jsonString: String, ticketDate: LocalDate): String? {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
             val matchingFlight = flightStatuses.firstOrNull {
-                it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
+                val scheduledGateDeparture = it.jsonObject["operationalTimes"]?.jsonObject
+                    ?.get("scheduledGateDeparture")?.jsonObject
+                val dateLocal = scheduledGateDeparture?.get("dateLocal")?.jsonPrimitive?.content
+                dateLocal?.startsWith(ticketDate.toString()) == true
             }
 
             if (matchingFlight != null) {
                 val flightStatus = matchingFlight.jsonObject
-                val departureDate = flightStatus["departureDate"]?.jsonObject
-                return departureDate?.get("dateLocal")?.toString()?.trim('"')
-            } else {
-                return null
+                val departureDate = flightStatus["operationalTimes"]?.jsonObject
+                    ?.get("scheduledGateDeparture")?.jsonObject
+                    ?.get("dateLocal")?.jsonPrimitive?.content
+                return departureDate
             }
-
         }
-
         return null
     }
 
-    fun getDepartureAirportFsCode(jsonString: String): String? {
+    fun getDepartureAirportFsCode(jsonString: String, ticketDate: LocalDate): String? {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = flightStatuses.firstOrNull() {
-                it.jsonObject["departureAirportFsCode"]?.jsonPrimitive?.content == "SIN"
+            val matchingFlight = flightStatuses.firstOrNull {
+                val scheduledGateDeparture = it.jsonObject["operationalTimes"]?.jsonObject
+                    ?.get("scheduledGateDeparture")?.jsonObject
+                val dateLocal = scheduledGateDeparture?.get("dateLocal")?.jsonPrimitive?.content
+                dateLocal?.startsWith(ticketDate.toString()) == true
             }
 
             if (matchingFlight != null) {
