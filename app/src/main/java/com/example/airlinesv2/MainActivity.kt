@@ -47,7 +47,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var barcodeScanner: BarcodeScanner
     private var scanningPaused = false
-    private lateinit var currentTimeClock: TextView
+
+    private lateinit var test1: TextView
+    private lateinit var test2: TextView
+    private lateinit var test3: TextView
+
+
     private lateinit var advanceTimeClock: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -61,7 +66,12 @@ class MainActivity : AppCompatActivity() {
 
         clearDetails()
 
-        currentTimeClock = findViewById(R.id.currentTimeClock)
+        test1 = findViewById(R.id.test1)
+        test2 = findViewById(R.id.test2)
+        test3 = findViewById(R.id.test3)
+
+
+
         advanceTimeClock = findViewById(R.id.advanceTimeClock)
         startClocks()
 
@@ -216,25 +226,49 @@ class MainActivity : AppCompatActivity() {
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
             val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
             val airport = getDepartureAirportFsCode(jsonResponse, ticketDate) ?: ""
+            val delayFlight = getEstimatedGateDeparture(jsonResponse, ticketDate) ?: ""
+            test1.text = "departureDate: $departureDate delay:${delayFlight}"
 
-            val errorMsg = airport?.let {
-                if (departureDate != null) {
-                    validateFlight(it, departureDate, ticketDate)
+            val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+            val departureDateStr = departureDate // "2023-12-28T14:30:00"
+            val delayFlightStr = delayFlight // "2023-12-28T16:00:00"
+
+            try {
+                val departureDateTime = LocalDateTime.parse(departureDateStr, dateFormat)
+                val delayFlightTime = LocalDateTime.parse(delayFlightStr, dateFormat)
+
+                // Determine the latest date and set it to Depart
+                val Depart = if (departureDateTime.isBefore(delayFlightTime)) {
+                    departureDateTime
                 } else {
-                    "Error during scan"
+                    delayFlightTime
                 }
-            }
 
-            if (!errorMsg.isNullOrEmpty()) {
+                // Update test1 text with the latest date
+                test2.text = "Latest Date: ${Depart.toString()}"
+
+                // Convert Depart to string format if needed for validateFlight
+                val departString = Depart.format(dateFormat)
+
+                val errorMsg = airport?.let {
+                    validateFlight(it, departString, ticketDate) // Use Depart here
+                } ?: "Error during scan"
+
+                if (!errorMsg.isNullOrEmpty()) {
+                    validationUIResponse(false)
+                } else {
+                    validationUIResponse(true)
+                }
+            } catch (e: Exception) {
+                // Handle parsing error
+                test3.text = "Error parsing dates: ${e.message}"
                 validationUIResponse(false)
-            } else {
-                validationUIResponse(true)
             }
-
         } else {
             validationUIResponse(false)
         }
     }
+
 
     fun getDepartureDateLocal(jsonString: String, ticketDate: LocalDate): String? {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
@@ -281,8 +315,33 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
+    fun getEstimatedGateDeparture(jsonString: String, ticketDate: LocalDate): String? {
+
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
+
+        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
+            val matchingFlight = flightStatuses.firstOrNull {
+                val estimatedGateDeparture = it.jsonObject["operationalTimes"]?.jsonObject
+                    ?.get("estimatedGateDeparture")?.jsonObject
+                val dateLocal = estimatedGateDeparture?.get("dateLocal")?.jsonPrimitive?.content
+                dateLocal?.startsWith(ticketDate.toString()) == true
+            }
+
+            if (matchingFlight != null) {
+                val flightStatus = matchingFlight.jsonObject
+                val estimatedDepartureDate = flightStatus["operationalTimes"]?.jsonObject
+                    ?.get("estimatedGateDeparture")?.jsonObject
+                    ?.get("dateLocal")?.jsonPrimitive?.content
+                return estimatedDepartureDate
+            }
+        }
+        return null
+    }
+
     fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String, ticketDate: LocalDate ): String {
         return try {
+
             // Check if departure is from SIN
             if (departureAirportFsCode != "SIN") {
                 return "Alert: Departure is not from SIN!"
@@ -428,9 +487,6 @@ class MainActivity : AppCompatActivity() {
         handler.post(object : Runnable {
             override fun run() {
                 val now = Calendar.getInstance()
-
-                val currentTime = dateTimeFormat.format(now.time)
-                currentTimeClock.text = ""
 
                 now.add(Calendar.HOUR_OF_DAY, 24)
                 val advanceTime = dateTimeFormat.format(now.time)
