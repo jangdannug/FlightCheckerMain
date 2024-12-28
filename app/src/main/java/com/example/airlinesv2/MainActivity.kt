@@ -227,24 +227,30 @@ class MainActivity : AppCompatActivity() {
             val airport = getDepartureAirportFsCode(jsonResponse, ticketDate) ?: ""
             val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
             val delayFlight = getEstimatedGateDeparture(jsonResponse, ticketDate) ?: ""
-            test1.text = "departureDate: $departureDate delay:${delayFlight}"
 
             try {
-                val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
-                val departureDt = LocalDateTime.parse(departureDate, dateFormat)
-                val delayFlightDt = LocalDateTime.parse(delayFlight, dateFormat)
 
-                val Depart = if (departureDt.isBefore(delayFlightDt)) {
+                val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+
+                val departureDt = LocalDateTime.parse(departureDate, dateFormat)
+                //test1.text = "departureDT: $departureDt delayFlight: $delayFlight"
+
+                val delayFlightDt = if (!delayFlight.isNullOrEmpty()) {
+                    LocalDateTime.parse(delayFlight, dateFormat)
+                } else {
+                    null
+                }
+
+
+                val depart = if (delayFlightDt == null) {
+                    departureDt
+                } else if (departureDt.isBefore(delayFlightDt)) {
                     delayFlightDt
                 } else {
                     departureDt
                 }
-
-                // Update test1 text with the latest date
-                test2.text = "Latest Date: ${Depart.toString()}"
-
-                // Convert Depart to string format if needed for validateFlight
-                val departString = Depart.format(dateFormat)
+                val departString = depart.format(dateFormat)
+                //test2.text = "Latest: $departString"
 
                 val errorMsg = airport?.let {
                     validateFlight(it, departString, ticketDate) // Use Depart here
@@ -257,7 +263,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 // Handle parsing error
-                test3.text = "Error parsing dates: ${e.message}"
+                //test3.text = "Error parsing dates: ${e.message}"
                 validationUIResponse(false)
             }
         } else {
