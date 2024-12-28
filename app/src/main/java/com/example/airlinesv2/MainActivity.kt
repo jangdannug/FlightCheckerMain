@@ -224,24 +224,20 @@ class MainActivity : AppCompatActivity() {
         val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
 
         if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
             val airport = getDepartureAirportFsCode(jsonResponse, ticketDate) ?: ""
+            val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
             val delayFlight = getEstimatedGateDeparture(jsonResponse, ticketDate) ?: ""
             test1.text = "departureDate: $departureDate delay:${delayFlight}"
 
-            val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-            val departureDateStr = departureDate // "2023-12-28T14:30:00"
-            val delayFlightStr = delayFlight // "2023-12-28T16:00:00"
-
             try {
-                val departureDateTime = LocalDateTime.parse(departureDateStr, dateFormat)
-                val delayFlightTime = LocalDateTime.parse(delayFlightStr, dateFormat)
+                val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+                val departureDt = LocalDateTime.parse(departureDate, dateFormat)
+                val delayFlightDt = LocalDateTime.parse(delayFlight, dateFormat)
 
-                // Determine the latest date and set it to Depart
-                val Depart = if (departureDateTime.isBefore(delayFlightTime)) {
-                    departureDateTime
+                val Depart = if (departureDt.isBefore(delayFlightDt)) {
+                    delayFlightDt
                 } else {
-                    delayFlightTime
+                    departureDt
                 }
 
                 // Update test1 text with the latest date

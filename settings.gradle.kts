@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FlightChecker v5.6"
+rootProject.name = "FlightChecker v5.7"
 include(":app")
