@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.util.Size
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.OptIn
@@ -23,6 +22,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -70,8 +70,6 @@ class MainActivity : AppCompatActivity() {
         test2 = findViewById(R.id.test2)
         test3 = findViewById(R.id.test3)
 
-
-
         advanceTimeClock = findViewById(R.id.advanceTimeClock)
         startClocks()
 
@@ -80,7 +78,10 @@ class MainActivity : AppCompatActivity() {
 
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
             == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startCamera()
+            lifecycleScope.launch{
+                startCamera()
+            }
+
         } else {
             ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 1)
         }
@@ -92,31 +93,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+    suspend fun startCamera() {
 
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
+        try {
 
-            val preview = Preview.Builder().build()
-            preview.setSurfaceProvider(findViewById<PreviewView>(R.id.previewView).surfaceProvider)
 
-            val imageAnalysis = ImageAnalysis.Builder()
-                .build()
-            imageAnalysis.setAnalyzer(cameraExecutor, { imageProxy ->
-                if (!scanningPaused) {
-                    processImageProxy(imageProxy)
-                } else {
-                    imageProxy.close()
-                }
-            })
+            val context = this
+            queryApi(context)
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
-            val cameraSelector = CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                .build()
+            cameraProviderFuture.addListener({
+                val cameraProvider = cameraProviderFuture.get()
 
-            cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
-        }, ContextCompat.getMainExecutor(this))
+                val preview = Preview.Builder().build()
+                preview.setSurfaceProvider(findViewById<PreviewView>(R.id.previewView).surfaceProvider)
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .build()
+                imageAnalysis.setAnalyzer(cameraExecutor, { imageProxy ->
+                    if (!scanningPaused) {
+                        processImageProxy(imageProxy)
+                    } else {
+                        imageProxy.close()
+                    }
+                })
+
+                val cameraSelector = CameraSelector.Builder()
+                    .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                    .build()
+
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
+            }, ContextCompat.getMainExecutor(this))
+        } catch (e:Exception){
+            null
+        }
     }
 
     @OptIn(ExperimentalGetImage::class)
@@ -511,7 +521,7 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) {
             if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                startCamera()
+                lifecycleScope.launch {startCamera() }
             } else {
                 Log.e("Permission", "Camera permission denied")
             }
