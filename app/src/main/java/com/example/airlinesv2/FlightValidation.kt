@@ -7,9 +7,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-
-
-
 fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String, ticketDate: LocalDate): String {
     return try {
 
@@ -42,9 +39,8 @@ fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: Strin
     }
 }
 
-   fun test(context: Context, barcode: BarcodeData)
-   {
-val db = DataBaseHandler(context)
+   fun test(context: Context, barcode: BarcodeData) {
+       val db = DataBaseHandler(context)
        val test1 = barcode.flightDate
        val test2 = barcode.flightIata
 
