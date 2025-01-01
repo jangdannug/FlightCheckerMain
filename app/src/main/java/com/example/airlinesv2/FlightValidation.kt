@@ -48,7 +48,10 @@ val db = DataBaseHandler(context)
        val test1 = barcode.flightDate
        val test2 = barcode.flightIata
 
-       db.getDataByFlightCode(test2)
+       val res = db.getDataByFlightCode("BR6061")
+
+       val tesid = res.flightIds
+       val testflight = res.flightCodes
 
    }
 

@@ -60,13 +60,17 @@ import java.time.format.DateTimeFormatter
                 val execType = 1
 
                 val dbDbDataLogs = DbDataLogs(
-                    executeDt = currentDate,
+                    executeDt = "currentDate",
                     dataSize = flightIdsSize.toString(),
                     execType = execType.toString()
                 )
 
+                db.deleteDatabase(context)
+
                 db.insertFlights(dbFlights)
                 db.insertDataLogs(dbDbDataLogs)
+
+
             }
 
         } catch (e: Exception) {
@@ -86,8 +90,7 @@ import java.time.format.DateTimeFormatter
         val appId = "6acd1100"
         val appKey = "a287bbec7d155e99d39eae55fe341828"
 
-        val url =
-            "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${reqHours}"
+        val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${reqHours}"
 
         return withContext(Dispatchers.IO) {
             try {

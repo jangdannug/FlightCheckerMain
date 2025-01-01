@@ -27,8 +27,7 @@ class DbFlight{
 
     constructor(
         flightIds: String, flightCodes: String,
-        departureAirportFsCodes: String, departureDates: String,
-        delayFlights: String, createdDt: String
+        departureAirportFsCodes: String, departureDates: String
     ) {
         this.flightIds = flightIds
         this.flightCodes = flightCodes
@@ -48,5 +47,22 @@ class DbDataLogs{
         this.executeDt = executeDt
         this.dataSize = dataSize
         this.execType = execType
+    }
+}
+
+class DbFlightNull{
+    var flightIds: String
+    var flightCodes: String
+    var departureAirportFsCodes: String
+    var departureDates: String
+
+    constructor(
+        flightIds: String, flightCodes: String,
+        departureAirportFsCodes: String, departureDates: String
+    ) {
+        this.flightIds = ""
+        this.flightCodes = ""
+        this.departureAirportFsCodes = ""
+        this.departureDates = ""
     }
 }

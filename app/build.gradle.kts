@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.jackson.module.kotlin)
+    implementation ("com.google.guava:guava:30.1-android")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 }

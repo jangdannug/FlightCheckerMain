@@ -1,5 +1,6 @@
 package com.example.airlinesv2
 
+import android.content.Context
 import android.graphics.Color
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -175,7 +176,7 @@ class MainActivity : AppCompatActivity() {
                                             val apiResult = getRequestAsync(it)
                                             if (apiResult != null) {
                                                 //processApiResults(apiResult,extractedData.flightDate)
-                                                val context = this
+                                                val context: Context = applicationContext
                                                 test(context,extractedData)
 
                                             }
