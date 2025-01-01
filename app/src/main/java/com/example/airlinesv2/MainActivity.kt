@@ -60,54 +60,61 @@ class MainActivity : AppCompatActivity() {
     private val dateTimeFormat = SimpleDateFormat("dd MMM yyyy hh:mm a", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContentView(R.layout.activity_main)
-
-        clearDetails()
-
-        test1 = findViewById(R.id.test1)
-        test2 = findViewById(R.id.test2)
-        test3 = findViewById(R.id.test3)
-
-        advanceTimeClock = findViewById(R.id.advanceTimeClock)
-        startClocks()
-
-        barcodeScanner = BarcodeScanning.getClient()
-        cameraExecutor = Executors.newSingleThreadExecutor()
-
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
-            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            lifecycleScope.launch{
-                startCamera()
-            }
-
-        } else {
-            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 1)
-        }
-
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.previewView)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
-    }
-
-    suspend fun startCamera() {
 
         try {
 
+            super.onCreate(savedInstanceState)
+            enableEdgeToEdge()
+            setContentView(R.layout.activity_main)
+
+            clearDetails()
+
+            test1 = findViewById(R.id.test1)
+            test2 = findViewById(R.id.test2)
+            test3 = findViewById(R.id.test3)
+
+            advanceTimeClock = findViewById(R.id.advanceTimeClock)
+            startClocks()
 
             val context = this
-            queryApi(context)
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+            lifecycleScope.launch {
+                queryApi(context)
+            }
 
+
+            barcodeScanner = BarcodeScanning.getClient()
+            cameraExecutor = Executors.newSingleThreadExecutor()
+
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                startCamera()
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.CAMERA),
+                    1
+                )
+            }
+
+            ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.previewView)) { v, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+                insets
+            }
+        }catch (e:Exception){
+            null
+        }
+    }
+
+     fun startCamera() {
+
+        try {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
-
                 val preview = Preview.Builder().build()
                 preview.setSurfaceProvider(findViewById<PreviewView>(R.id.previewView).surfaceProvider)
-
                 val imageAnalysis = ImageAnalysis.Builder()
                     .build()
                 imageAnalysis.setAnalyzer(cameraExecutor, { imageProxy ->
@@ -165,7 +172,7 @@ class MainActivity : AppCompatActivity() {
                                         if (preValidateBarcode(extractedData)) {
                                             val apiResult = getRequestAsync(it)
                                             if (apiResult != null) {
-                                                processApiResults(apiResult,extractedData.flightDate)
+                                                //processApiResults(apiResult,extractedData.flightDate)
                                             }
                                             delay(3000)
                                             scanningPaused = false
@@ -229,81 +236,6 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    fun processApiResults(jsonResponse: String, ticketDate: LocalDate) {
-        val jsonObject = Json.parseToJsonElement(jsonResponse).jsonObject
-        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val airport = getDepartureAirportFsCode(jsonResponse, ticketDate) ?: ""
-            val departureDate = getDepartureDateLocal(jsonResponse, ticketDate) ?: ""
-            val delayFlight = getEstimatedGateDeparture(jsonResponse, ticketDate) ?: ""
-
-            try {
-
-                val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
-
-                val departureDt = LocalDateTime.parse(departureDate, dateFormat)
-                //test1.text = "departureDT: $departureDt delayFlight: $delayFlight"
-
-                val delayFlightDt = if (!delayFlight.isNullOrEmpty()) {
-                    LocalDateTime.parse(delayFlight, dateFormat)
-                } else {
-                    null
-                }
-
-
-                val depart = if (delayFlightDt == null) {
-                    departureDt
-                } else if (departureDt.isBefore(delayFlightDt)) {
-                    delayFlightDt
-                } else {
-                    departureDt
-                }
-                val departString = depart.format(dateFormat)
-                //test2.text = "Latest: $departString"
-
-                val errorMsg = airport?.let {
-                    validateFlight(it, departString, ticketDate) // Use Depart here
-                } ?: "Error during scan"
-
-                if (!errorMsg.isNullOrEmpty()) {
-                    validationUIResponse(false)
-                } else {
-                    validationUIResponse(true)
-                }
-            } catch (e: Exception) {
-                // Handle parsing error
-                //test3.text = "Error parsing dates: ${e.message}"
-                validationUIResponse(false)
-            }
-        } else {
-            validationUIResponse(false)
-        }
-    }
-
-
-    fun getDepartureDateLocal(jsonString: String, ticketDate: LocalDate): String? {
-        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = flightStatuses.firstOrNull {
-                val scheduledGateDeparture = it.jsonObject["operationalTimes"]?.jsonObject
-                    ?.get("scheduledGateDeparture")?.jsonObject
-                val dateLocal = scheduledGateDeparture?.get("dateLocal")?.jsonPrimitive?.content
-                dateLocal?.startsWith(ticketDate.toString()) == true
-            }
-
-            if (matchingFlight != null) {
-                val flightStatus = matchingFlight.jsonObject
-                val departureDate = flightStatus["operationalTimes"]?.jsonObject
-                    ?.get("scheduledGateDeparture")?.jsonObject
-                    ?.get("dateLocal")?.jsonPrimitive?.content
-                return departureDate
-            }
-        }
-        return null
-    }
 
     fun getDepartureAirportFsCode(jsonString: String, ticketDate: LocalDate): String? {
         val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
@@ -327,72 +259,7 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    fun getEstimatedGateDeparture(jsonString: String, ticketDate: LocalDate): String? {
 
-        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-        val flightStatuses = jsonObject["flightStatuses"]?.jsonArray
-
-        if (flightStatuses != null && flightStatuses.isNotEmpty()) {
-            val matchingFlight = flightStatuses.firstOrNull {
-                val estimatedGateDeparture = it.jsonObject["operationalTimes"]?.jsonObject
-                    ?.get("estimatedGateDeparture")?.jsonObject
-                val dateLocal = estimatedGateDeparture?.get("dateLocal")?.jsonPrimitive?.content
-                dateLocal?.startsWith(ticketDate.toString()) == true
-            }
-
-            if (matchingFlight != null) {
-                val flightStatus = matchingFlight.jsonObject
-                val estimatedDepartureDate = flightStatus["operationalTimes"]?.jsonObject
-                    ?.get("estimatedGateDeparture")?.jsonObject
-                    ?.get("dateLocal")?.jsonPrimitive?.content
-                return estimatedDepartureDate
-            }
-        }
-        return null
-    }
-
-    fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: String, ticketDate: LocalDate ): String {
-        return try {
-
-            // Check if departure is from SIN
-            if (departureAirportFsCode != "SIN") {
-                return "Alert: Departure is not from SIN!"
-            }
-
-            // Define the formatter to parse the input date
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
-            // Parse the input date string into a LocalDateTime object
-            val apiDepDate = LocalDateTime.parse(scheduledDepartureDate, formatter)
-            // Get the current date and time
-            val currentDate = LocalDateTime.now()
-
-            // Check if the input date is in the past
-            if (apiDepDate.isBefore(currentDate) || apiDepDate.toLocalDate().isBefore(ticketDate)) {
-                return "Alert: The flight has already departed!"
-            }
-
-            val minutesDifference = ChronoUnit.MINUTES.between(currentDate, apiDepDate)
-
-            return if (minutesDifference in 0..1440) {
-                ""
-            } else {
-                "The flight is NOT within 24 hours."
-            }
-        } catch (ex: Exception) {
-            "Internal Server Error Occurred"
-        }
-    }
-
-    fun populateBoardingPass(data: BarcodeData) {
-            val flightIata = findViewById<TextView>(R.id.flightIata)
-            flightIata.text = "Flight IATA: ${data.flightIata}"
-
-            val formattedFlightDate =
-                data.flightDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-
-            val departureDate = findViewById<TextView>(R.id.departureDate)
-            departureDate.text = "Departure Date: $formattedFlightDate"
-    }
 
     fun clearDetails() {
         val departureTime = findViewById<TextView>(R.id.flightIata)
@@ -440,6 +307,17 @@ class MainActivity : AppCompatActivity() {
             clearDetails()
             return  null
         }
+    }
+
+    fun populateBoardingPass(data: BarcodeData) {
+        val flightIata = findViewById<TextView>(R.id.flightIata)
+        flightIata.text = "Flight IATA: ${data.flightIata}"
+
+        val formattedFlightDate =
+            data.flightDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+
+        val departureDate = findViewById<TextView>(R.id.departureDate)
+        departureDate.text = "Departure Date: $formattedFlightDate"
     }
 
     fun validationUIResponse(valid: Boolean) {
@@ -521,7 +399,7 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) {
             if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                lifecycleScope.launch {startCamera() }
+                startCamera()
             } else {
                 Log.e("Permission", "Camera permission denied")
             }
