@@ -166,7 +166,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             var cursor: Cursor? = null
 
             try {
-                cursor = db.rawQuery(query, null)
+                cursor = db.rawQuery(query, arrayOf(flightCode))
 
                 if (cursor.moveToFirst()) {
                     val flightId = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))

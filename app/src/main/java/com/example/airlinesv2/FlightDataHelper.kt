@@ -50,19 +50,19 @@ class DbDataLogs{
     }
 }
 
-class DbFlightNull{
-    var flightIds: String
-    var flightCodes: String
-    var departureAirportFsCodes: String
-    var departureDates: String
+class DbDataFlight{
+    var flightId: String
+    var flightCode: String
+    var departureAirportFsCode: String
+    var departureDate: String
 
     constructor(
-        flightIds: String, flightCodes: String,
-        departureAirportFsCodes: String, departureDates: String
+        flightId: String, flightCode: String,
+        departureAirportFsCode: String, departureDate: String
     ) {
-        this.flightIds = ""
-        this.flightCodes = ""
-        this.departureAirportFsCodes = ""
-        this.departureDates = ""
+        this.flightId = flightId
+        this.flightCode = flightCode
+        this.departureAirportFsCode = departureAirportFsCode
+        this.departureDate = departureDate
     }
 }

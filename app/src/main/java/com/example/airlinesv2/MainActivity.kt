@@ -177,7 +177,11 @@ class MainActivity : AppCompatActivity() {
                                             if (apiResult != null) {
                                                 //processApiResults(apiResult,extractedData.flightDate)
                                                 val context: Context = applicationContext
-                                                test(context,extractedData)
+                                               val testResult = test(context,extractedData)
+                                                test1.text = "test1 depart: ${testResult.departureDate}"
+                                                test2.text ="test2 airport: ${testResult.departureAirportFsCode}"
+                                                test3.text = "test3 flightCode: ${testResult.flightCode}"
+
 
                                             }
                                             delay(3000)

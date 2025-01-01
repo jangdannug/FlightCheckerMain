@@ -39,16 +39,19 @@ fun validateFlight(departureAirportFsCode: String, scheduledDepartureDate: Strin
     }
 }
 
-   fun test(context: Context, barcode: BarcodeData) {
+   fun test(context: Context, barcode: BarcodeData) :DbDataFlight{
        val db = DataBaseHandler(context)
        val test1 = barcode.flightDate
        val test2 = barcode.flightIata
 
-       val res = db.getDataByFlightCode("BR6061")
+       val dbResult = db.getDataByFlightCode("BR6061")
 
-       val tesid = res.flightIds
-       val testflight = res.flightCodes
-
+       return DbDataFlight(
+           flightId = dbResult.flightIds,
+           flightCode = dbResult.flightCodes,
+           departureAirportFsCode = dbResult.departureAirportFsCodes,
+           departureDate = dbResult.departureDates
+       )
    }
 
 
