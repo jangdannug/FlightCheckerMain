@@ -31,7 +31,7 @@ import java.time.format.DateTimeFormatter
             val localDateTime = LocalDateTime.parse(checkUpdate)
             val isUpdated = db.isCurrentTimeInInterval(localDateTime)
 
-            if (!isUpdated) {
+            if (isUpdated) {
 
                 showCustomToast(context, "UPDATING PLEASE WAIT")
                 val jsonResponse = getApiAsync()
@@ -84,6 +84,7 @@ import java.time.format.DateTimeFormatter
 
                     db.insertFlights(dbFlights)
                     db.insertDataLogs(DbDataLogs)
+
                 }
             }
             return
