@@ -7,7 +7,9 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 const val DATABASE_NAME = "Flights"
 const val TABLE_NAME = "FlightStatuses"
@@ -95,12 +97,12 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
             // Mark transaction as successful
             db.setTransactionSuccessful()
-
             Log.d("DB_INSERT", "Inserted: $successCount, Failed: $failureCount")
         } catch (e: Exception) {
             Log.e("DB_INSERT", "Error during DB insert", e)
         } finally {
             db.endTransaction() // End the transaction
+            db.close()
         }
     }
 
@@ -110,37 +112,31 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         db.beginTransaction()
 
         try {
-            var successCount = 0 // Counter for successful inserts
-            var failureCount = 0 // Counter for failed inserts
+            // Delete all existing records
+            db.execSQL("DELETE FROM $TABLE_dataLogs")
 
-            // ContentValues for inserting or updating
+            // ContentValues for inserting new data
             val values = ContentValues().apply {
-                put("$COL_executeDt", dbLogs.executeDt)
-                put("$COL_dataSize", dbLogs.dataSize)
-                put("$COL_execType", dbLogs.execType)
+                put(COL_executeDt, dbLogs.executeDt) // No need for "$" here
+                put(COL_dataSize, dbLogs.dataSize) // Ensure this is the correct type
+                put(COL_execType, dbLogs.execType)
             }
 
-            val whereClause = "executeDt = ?"
-            val whereArgs = arrayOf(dbLogs.execType)
-
-            val result = db.update("dataLogs", values, whereClause, whereArgs)
-
-            if (result != -1) {
-                successCount++ // Increment success counter
+            // Insert new data
+            val newRowId = db.insert(TABLE_dataLogs, null, values)
+            if (newRowId != -1L) {
+                Log.d("DB_INSERT", "Data inserted successfully with row ID: $newRowId")
             } else {
-                failureCount++ // Increment failure counter
-                Log.e("DB_UPDATE", "Failed to update data.")
+                Log.e("DB_INSERT", "Failed to insert new data.")
             }
 
-            val testSuccess = successCount
-            val testFail = failureCount
-
-            db.setTransactionSuccessful() // Mark the transaction as successful
+            db.setTransactionSuccessful()
         } catch (e: Exception) {
-            Log.e("DB_ERROR", "Error inserting or updating data", e)
+            Log.e("DB_ERROR", "Error inserting data", e)
         } finally {
             // Ensure the transaction is ended properly
             db.endTransaction()
+            db.close()
         }
     }
 
@@ -195,6 +191,88 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         return DbFlight("", "", "", "")
     }
 
+
+    fun getLatestUpdate(): String? {
+        val db = this.readableDatabase
+        var latestExecuteDt: String? = null
+
+        //Verify if there are rows
+        val dataLogsCount = countDataLogs()
+        val flightCount = countFlights()
+
+        if (dataLogsCount > 0 || flightCount > 0)
+        {
+            try {
+
+                // Query to get the latest executeDt
+                val query = "SELECT * FROM $TABLE_dataLogs ORDER BY $COL_executeDt DESC LIMIT 1"
+
+                val cursor = db.rawQuery(query, null)
+
+                // Log the number of rows returned
+                val rowCount = cursor.count
+                println("Number of rows returned: $rowCount")
+
+
+                if (cursor.moveToFirst()) {
+                    val columnIndex = cursor.getColumnIndex(COL_executeDt)
+                    if (columnIndex != -1) {
+                        latestExecuteDt = cursor.getString(columnIndex)
+                    } else {
+                        println("Column $COL_executeDt not found in cursor.")
+                    }
+                }
+
+                cursor.close()
+                db.close()
+                return latestExecuteDt
+            } catch (e: Exception) {
+                return null
+            }
+        }
+        return null
+    }
+
+    fun countDataLogs(): Int {
+        val db = this.readableDatabase
+        val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_dataLogs", null)
+        cursor.moveToFirst()
+        val count = cursor.getInt(0)
+        cursor.close()
+        return count
+    }
+
+    fun countFlights(): Int {
+        val db = this.readableDatabase
+        var count = 0
+        val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_NAME", null)
+        if (cursor.moveToFirst()) {
+            count = cursor.getInt(0)
+        }
+        cursor.close()
+        return count
+    }
+
+    fun isCurrentTimeInInterval(dateTime: LocalDateTime): Boolean {
+        val time = dateTime.toLocalTime()
+        val date = dateTime.toLocalDate()
+
+        // Check if the date is today
+        val today = LocalDate.now()
+
+        // If the date is today, check the time intervals
+        return if (date.isEqual(today)) {
+            when {
+                time.isAfter(LocalTime.of(0, 0)) && time.isBefore(LocalTime.of(6, 0)) -> true // 12:00 AM to 6:00 AM
+                time.isAfter(LocalTime.of(6, 0)) && time.isBefore(LocalTime.of(12, 0)) -> true // 6:00 AM to 12:00 PM
+                time.isAfter(LocalTime.of(12, 0)) && time.isBefore(LocalTime.of(18, 0)) -> true // 12:00 PM to 6:00 PM
+                time.isAfter(LocalTime.of(18, 0)) && time.isBefore(LocalTime.of(24, 0)) -> true // 6:00 PM to 12:00 AM
+                else -> false // Invalid time
+            }
+        } else {
+            false // The date is not today
+        }
+    }
 
 
     fun deleteDatabase(context: Context) {

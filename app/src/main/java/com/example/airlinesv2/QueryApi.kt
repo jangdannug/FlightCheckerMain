@@ -1,7 +1,15 @@
 package com.example.airlinesv2
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -18,63 +26,70 @@ import java.time.format.DateTimeFormatter
         val db = DataBaseHandler(context)
 
         try {
-            val jsonResponse = getApiAsync()
-            val jsonObject = jsonResponse?.let { Json.parseToJsonElement(jsonResponse).jsonObject }
-            val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
 
-            if (!flightStatuses.isNullOrEmpty()) {
-                val flightId = getFlightId(flightStatuses)
-                val fsCode = getFsCode(flightStatuses)
-                val flightNumber = getFlightNumber(flightStatuses)
-                val airportFsCode = getAirPortFsCode(flightStatuses)
-                val departureDt = getLatestDepartureDt(flightStatuses)
+            val  checkUpdate = db.getLatestUpdate()
+            val localDateTime = LocalDateTime.parse(checkUpdate)
+            val isUpdated = db.isCurrentTimeInInterval(localDateTime)
 
-                //Mapping
-                val flightIdInt = flightId.mapNotNull { it.toIntOrNull() }
+            if (!isUpdated) {
 
-                val flightCodesMap = flightId.map { flightId ->
-                    val carrierFsCode = fsCode[flightId] ?: ""
-                    val flightNumber = flightNumber[flightId] ?: ""
-                    "$carrierFsCode$flightNumber"
+                showCustomToast(context, "UPDATING PLEASE WAIT")
+                val jsonResponse = getApiAsync()
+                val jsonObject = jsonResponse?.let { Json.parseToJsonElement(jsonResponse).jsonObject }
+                val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
+
+                if (!flightStatuses.isNullOrEmpty()) {
+                    val flightId = getFlightId(flightStatuses)
+                    val fsCode = getFsCode(flightStatuses)
+                    val flightNumber = getFlightNumber(flightStatuses)
+                    val airportFsCode = getAirPortFsCode(flightStatuses)
+                    val departureDt = getLatestDepartureDt(flightStatuses)
+
+                    //Mapping
+                    val flightIdInt = flightId.mapNotNull { it.toIntOrNull() }
+
+                    val flightCodesMap = flightId.map { flightId ->
+                        val carrierFsCode = fsCode[flightId] ?: ""
+                        val flightNumber = flightNumber[flightId] ?: ""
+                        "$carrierFsCode$flightNumber"
+                    }
+
+                    val airportFsCodeMap = flightId.map { flightId ->
+                        airportFsCode[flightId] ?: ""
+                    }
+
+
+                    val departureDtMap = flightId.map { flightId ->
+                        departureDt[flightId] ?: ""
+                    }
+
+                    val dbFlights = Flights(
+                        flightIds = flightIdInt,
+                        flightCodes = flightCodesMap,
+                        departureAirportFsCodes = airportFsCodeMap,
+                        departureDates = departureDtMap
+                    )
+
+                    val currentDate = LocalDateTime.now().toString()
+                    val flightIdsSize = dbFlights.flightIds.size
+                    val execType = "update"
+
+                    val DbDataLogs = DbDataLogs(
+                        executeDt = currentDate,
+                        dataSize = flightIdsSize.toString(),
+                        execType = execType.toString()
+                    )
+
+                    db.deleteDatabase(context)
+
+                    db.insertFlights(dbFlights)
+                    db.insertDataLogs(DbDataLogs)
                 }
-
-                val airportFsCodeMap = flightId.map { flightId ->
-                    airportFsCode[flightId] ?: ""
-                }
-
-
-                val departureDtMap = flightId.map { flightId ->
-                    departureDt[flightId] ?: ""
-                }
-
-                val dbFlights = Flights(
-                    flightIds = flightIdInt,
-                    flightCodes = flightCodesMap,
-                    departureAirportFsCodes = airportFsCodeMap,
-                    departureDates = departureDtMap
-                )
-
-                val currentDate = LocalDateTime.now().toString()
-                val flightIdsSize = dbFlights.flightIds.size
-                val execType = 1
-
-                val dbDbDataLogs = DbDataLogs(
-                    executeDt = currentDate,
-                    dataSize = flightIdsSize.toString(),
-                    execType = execType.toString()
-                )
-
-                db.deleteDatabase(context)
-
-                db.insertFlights(dbFlights)
-                db.insertDataLogs(dbDbDataLogs)
-
-
             }
-
+            return
         } catch (e: Exception) {
-            Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
-        }
+                Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
+            }
 
     }
 
@@ -85,12 +100,13 @@ import java.time.format.DateTimeFormatter
         val currentDate = LocalDate.now()
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd/")
         val reqHours = 8
+        val numberHours = 6
         val currDate = currentDate.format(dateFormat)
         val appId = "6acd1100"
         val appKey = "a287bbec7d155e99d39eae55fe341828"
 
         val url =
-            "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${reqHours}"
+            "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}"
 
         return withContext(Dispatchers.IO) {
             try {
@@ -111,4 +127,53 @@ import java.time.format.DateTimeFormatter
                 null
             }
         }
+    }
+
+
+    fun showCustomToast(context: Context, message: String) {
+
+        // Inflate the custom layout
+        val inflater = LayoutInflater.from(context)
+        val layout: View = inflater.inflate(R.layout.custom_toast, null)
+
+        // Set the message text
+        val text: TextView = layout.findViewById(R.id.toast_text)
+        text.text = message
+
+        // Set the icon (optional)
+        val icon: ImageView = layout.findViewById(R.id.toast_icon)
+        icon.setImageResource(R.drawable.ic_error) // Replace with your icon resource
+
+        // Create the Toast
+        val toast = Toast(context)
+        toast.view = layout
+        toast.setGravity(Gravity.CENTER, 0, 0) // Center the Toast
+
+        // Handler for blinking effect
+        val handler = Handler()
+        var isVisible = true
+        val blinkInterval = 800L // Blink every 500 milliseconds
+        val totalDuration = 20000L // Total duration of 30 seconds
+
+        // Runnable to handle the blinking effect
+        val blinkRunnable = object : Runnable {
+            override fun run() {
+                if (isVisible) {
+                    toast.show() // Show the Toast
+                } else {
+                    toast.cancel() // Hide the Toast
+                }
+                isVisible = !isVisible // Toggle visibility
+                handler.postDelayed(this, blinkInterval) // Repeat after the blink interval
+            }
+        }
+
+        // Start the blinking effect
+        handler.post(blinkRunnable)
+
+        // Stop the blinking effect after 30 seconds
+        handler.postDelayed({
+            handler.removeCallbacks(blinkRunnable) // Stop the runnable
+            toast.cancel() // Ensure the Toast is hidden
+        }, totalDuration)
     }

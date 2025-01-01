@@ -1,5 +1,6 @@
 package com.example.airlinesv2
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.media.AudioManager
@@ -33,9 +34,6 @@ import java.util.concurrent.Executors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.*
@@ -46,7 +44,7 @@ import java.util.*
 class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var barcodeScanner: BarcodeScanner
-    private var scanningPaused = false
+    public var scanningPaused = false
 
     private lateinit var test1: TextView
     private lateinit var test2: TextView
@@ -172,18 +170,14 @@ class MainActivity : AppCompatActivity() {
                                 scanningPaused = true
                                 extractedData?.let {
                                     CoroutineScope(Dispatchers.Main).launch {
-                                        if (preValidateBarcode(extractedData)) {
-                                            val apiResult = getRequestAsync(it)
-                                            if (apiResult != null) {
-                                                //processApiResults(apiResult,extractedData.flightDate)
-                                                val context: Context = applicationContext
-                                               val testResult = test(context,extractedData)
-                                                test1.text = "test1 depart: ${testResult.departureDate}"
-                                                test2.text ="test2 airport: ${testResult.departureAirportFsCode}"
-                                                test3.text = "test3 flightCode: ${testResult.flightCode}"
 
+                                        if (preValidateBarcode(extractedData))
+                                        {
+                                            val context: Context = applicationContext
+                                            queryApi(context)
+                                            val isValidFlight = validateFlight(context,extractedData)
+                                            validationUIResponse(isValidFlight)
 
-                                            }
                                             delay(3000)
                                             scanningPaused = false
                                             clearDetails()
@@ -284,7 +278,7 @@ class MainActivity : AppCompatActivity() {
         validationMsg.text = ""
     }
 
-    fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
+    private fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
         try {
             // Extract data from the barcode
             val passengerName = encodedBarcode.substring(2, 22).trim()
@@ -318,7 +312,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun populateBoardingPass(data: BarcodeData) {
+    @SuppressLint("SetTextI18n")
+    private fun populateBoardingPass(data: BarcodeData) {
         val flightIata = findViewById<TextView>(R.id.flightIata)
         flightIata.text = "Flight IATA: ${data.flightIata}"
 
@@ -329,7 +324,7 @@ class MainActivity : AppCompatActivity() {
         departureDate.text = "Departure Date: $formattedFlightDate"
     }
 
-    fun validationUIResponse(valid: Boolean) {
+    private fun validationUIResponse(valid: Boolean) {
         val rootLayout =
             findViewById<androidx.constraintlayout.widget.ConstraintLayout>(
                 R.id.rootLayout
@@ -347,40 +342,6 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    suspend fun getRequestAsync(request: BarcodeData): String? {
-        val appId = "6acd1100"
-        val appKey = "a287bbec7d155e99d39eae55fe341828"
-
-        val currentDate = LocalDate.now()
-        var ticketDate = request.flightDate
-        //if (ticketDate.isAfter(currentDate)) {
-        //   ticketDate = ticketDate.minusDays(1)
-        //}
-        val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
-        val strDate = ticketDate.format(dateFormat)
-        val url =
-            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/flight/status/${request.airlineCode}/${request.flightNumber}/dep/${strDate}?appId=${appId}&appKey=${appKey}&utc=false&airport=SIN&extendedOptions=status=Departed"
-
-        return withContext(Dispatchers.IO) {
-            try {
-                val connection = URL(url).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connect()
-
-                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
-                    // Return the raw JSON string instead of deserializing
-                    jsonString
-                } else {
-                    println("\tERROR: Response Code ${connection.responseCode}")
-                    null
-                }
-            } catch (e: Exception) {
-                println("\tERROR: ${e.message}")
-                null
-            }
-        }
-    }
 
     private fun startClocks() {
         handler.post(object : Runnable {
