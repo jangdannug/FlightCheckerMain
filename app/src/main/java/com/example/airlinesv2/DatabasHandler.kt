@@ -3,16 +3,10 @@ package com.example.airlinesv2
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
-import android.widget.Toast
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import java.sql.Date
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 const val DATABASE_NAME = "Flights"
 const val TABLE_NAME = "FlightStatuses"
@@ -26,14 +20,16 @@ const val COL_executeDt = "executeDt"
 const val COL_dataSize = "dataSize"
 const val COL_execType = "execType"
 
-class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,null,1) {
+class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,null,1) {
 
     init {
         // Delete the existing database file
         context.deleteDatabase(DATABASE_NAME)
     }
 
+
     override fun onCreate(db: SQLiteDatabase?) {
+
         val createTable = " CREATE TABLE $TABLE_NAME (" +
                 "$COL_FlightId INTEGER PRIMARY KEY," +
                 "$COL_FlightCode TEXT," +
@@ -51,8 +47,9 @@ class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_N
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
-        db?.execSQL("DROP TABLE IF EXISTS $TABLE_NAME") // Drop the existing table
-        onCreate(db) // Recreate the table
+        db?.execSQL("DROP TABLE IF EXISTS $TABLE_NAME")  // Drop the existing table if it exists
+        db?.execSQL("DROP TABLE IF EXISTS $TABLE_dataLogs")  // Drop another table if it exists
+        onCreate(db)  // Recreate the tables as defined in the onCreate method
     }
 
     fun insertFlights(flights: Flights) {
@@ -151,6 +148,85 @@ class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_N
             // Ensure the transaction is ended properly
             db.endTransaction()
         }
+    }
+
+    fun getDataByFlightCode(flightCode: String): DbFlight {
+        try {
+            val db = this.readableDatabase // Use readableDatabase to fetch data
+            val query = "SELECT * FROM $TABLE_NAME WHERE $COL_FlightCode = ?"
+
+            // Initialize collections to store data
+            val flights = mutableListOf<Int>()
+            val flightCodes = mutableListOf<String>()
+            val departureAirportFsCodes = mutableListOf<String>()
+            val departureDates = mutableListOf<String>()
+            val delayFlights = mutableListOf<String>()
+            val createdDt = mutableListOf<String>()
+
+            var cursor: Cursor? = null
+
+            try {
+                cursor = db.rawQuery(query, arrayOf(flightCode))
+                while (cursor.moveToNext()) {
+                    // Collect data from the cursor
+                    flights.add(cursor.getInt(cursor.getColumnIndexOrThrow(COL_FlightId)))
+                    flightCodes.add(cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightCode)))
+                    departureAirportFsCodes.add(
+                        cursor.getString(
+                            cursor.getColumnIndexOrThrow(
+                                COL_DepartureAirportFsCode
+                            )
+                        )
+                    )
+                    departureDates.add(
+                        cursor.getString(
+                            cursor.getColumnIndexOrThrow(
+                                COL_DepartureDate
+                            )
+                        )
+                    )
+
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("DB_ERROR", "Error fetching data for flightCode: $flightCode", e)
+            } finally {
+                cursor?.close() // Ensure the cursor is closed
+            }
+
+            // Return result
+            return if (flights.isNotEmpty()) {
+                DbFlight(
+                    flightIds = flights.toString(),
+                    flightCodes = flightCodes.toString(),
+                    departureAirportFsCodes = departureAirportFsCodes.toString(),
+                    departureDates = departureDates.toString(),
+                    delayFlights = delayFlights.toString(),
+                    createdDt = createdDt.toString()
+                )
+            } else {
+                DbFlight(
+                    flightIds = "",
+                    flightCodes = "",
+                    departureAirportFsCodes = "",
+                    departureDates = "",
+                    delayFlights = "",
+                    createdDt = ""
+                )
+            }
+        }catch (e : Exception)
+        {
+            e.printStackTrace()
+            Log.e("DB_ERROR", "Error fetching data for flightCode: $flightCode", e)
+        }
+        return    DbFlight(
+            flightIds = "",
+            flightCodes = "",
+            departureAirportFsCodes = "",
+            departureDates = "",
+            delayFlights = "",
+            createdDt = ""
+        )
     }
 
 }

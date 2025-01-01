@@ -24,7 +24,6 @@ class DbFlight{
     var flightCodes: String
     var departureAirportFsCodes: String
     var departureDates: String
-    var delayFlights: String
 
     constructor(
         flightIds: String, flightCodes: String,
@@ -35,7 +34,6 @@ class DbFlight{
         this.flightCodes = flightCodes
         this.departureAirportFsCodes = departureAirportFsCodes
         this.departureDates = departureDates
-        this.delayFlights = delayFlights
     }
 }
 

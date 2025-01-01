@@ -40,8 +40,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.*
 import java.text.SimpleDateFormat
 import java.util.*
-import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
+
 
 class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
@@ -78,6 +77,7 @@ class MainActivity : AppCompatActivity() {
 
             val context = this
             lifecycleScope.launch {
+                scanningPaused = true
                 queryApi(context)
             }
 
@@ -102,6 +102,7 @@ class MainActivity : AppCompatActivity() {
                 v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
                 insets
             }
+            scanningPaused = false
         } catch (e: Exception) {
             null
         }
@@ -174,6 +175,9 @@ class MainActivity : AppCompatActivity() {
                                             val apiResult = getRequestAsync(it)
                                             if (apiResult != null) {
                                                 //processApiResults(apiResult,extractedData.flightDate)
+                                                val context = this
+                                                test(context,extractedData)
+
                                             }
                                             delay(3000)
                                             scanningPaused = false
