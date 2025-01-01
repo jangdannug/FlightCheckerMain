@@ -13,8 +13,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-    suspend fun queryApi(context : Context)
-    {
+    suspend fun queryApi(context : Context) {
         val context = context
         val db = DataBaseHandler(context)
 
@@ -70,14 +69,15 @@ import java.time.format.DateTimeFormatter
                 db.insertDataLogs(dbDbDataLogs)
             }
 
-        } catch (e:Exception){
-                Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
-            }
+        } catch (e: Exception) {
+            Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
+        }
 
     }
 
     suspend fun getApiAsync(): String? {
-        val baseUrl = "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
+        val baseUrl =
+            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
 
         val currentDate = LocalDate.now()
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd/")
@@ -86,7 +86,8 @@ import java.time.format.DateTimeFormatter
         val appId = "6acd1100"
         val appKey = "a287bbec7d155e99d39eae55fe341828"
 
-        val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${reqHours}"
+        val url =
+            "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${reqHours}"
 
         return withContext(Dispatchers.IO) {
             try {

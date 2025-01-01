@@ -29,30 +29,24 @@ const val COL_execType = "execType"
 class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,null,1) {
 
     init {
-    // Delete the existing database file
-    context.deleteDatabase(DATABASE_NAME)
+        // Delete the existing database file
+        context.deleteDatabase(DATABASE_NAME)
     }
 
     override fun onCreate(db: SQLiteDatabase?) {
-        val createTable = " CREATE TABLE " +
-                TABLE_NAME +
-                " (" +
-                COL_FlightId + " INTEGER PRIMARY KEY," +
-                COL_FlightCode + " TEXT," +
-                COL_DepartureAirportFsCode + " TEXT," +
-                COL_DepartureDate + " TEXT" +
-
-                " )"
+        val createTable = " CREATE TABLE $TABLE_NAME (" +
+                "$COL_FlightId INTEGER PRIMARY KEY," +
+                "$COL_FlightCode TEXT," +
+                "$COL_DepartureAirportFsCode TEXT," +
+                "$COL_DepartureDate TEXT)"
         db?.execSQL(createTable)
 
         // Create DataLogs table
-        val createTableDataLogs = "CREATE TABLE " +
-                TABLE_dataLogs +
-                " (" +
-                COL_executeDt + " TEXT," +
-                COL_dataSize + "TEXT," +
-                COL_execType + " TEXT" +
-                " )"
+        val createTableDataLogs = "CREATE TABLE $TABLE_dataLogs (" +
+                "$COL_executeDt TEXT," +
+                "$COL_dataSize TEXT," +
+                "$COL_execType TEXT)"
+
         db?.execSQL(createTableDataLogs)
     }
 
@@ -113,7 +107,7 @@ class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_N
             val testFail = failureCount
             // Mark the transaction as successful
 
-        }catch (e:Exception){
+        } catch (e: Exception) {
             e.printStackTrace() // Log the full stack trace
             Log.e("DB_INSERT", "Error during DB update", e)
         }
@@ -140,12 +134,12 @@ class DataBaseHandler ( context: Context) : SQLiteOpenHelper(context, DATABASE_N
 
             val result = db.update("dataLogs", values, whereClause, whereArgs)
 
-                if (result != -1) {
-                    successCount++ // Increment success counter
-                } else {
-                    failureCount++ // Increment failure counter
-                    Log.e("DB_UPDATE", "Failed to update data.")
-                }
+            if (result != -1) {
+                successCount++ // Increment success counter
+            } else {
+                failureCount++ // Increment failure counter
+                Log.e("DB_UPDATE", "Failed to update data.")
+            }
 
             val testSuccess = successCount
             val testFail = failureCount

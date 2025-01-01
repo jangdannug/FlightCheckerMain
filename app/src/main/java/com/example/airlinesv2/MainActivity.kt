@@ -102,12 +102,12 @@ class MainActivity : AppCompatActivity() {
                 v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
                 insets
             }
-        }catch (e:Exception){
+        } catch (e: Exception) {
             null
         }
     }
 
-     fun startCamera() {
+    fun startCamera() {
 
         try {
             val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
 
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
             }, ContextCompat.getMainExecutor(this))
-        } catch (e:Exception){
+        } catch (e: Exception) {
             null
         }
     }
@@ -142,7 +142,8 @@ class MainActivity : AppCompatActivity() {
 
         if (mediaImage != null) {
             try {
-                val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                val inputImage =
+                    InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
                 barcodeScanner.process(inputImage)
                     .addOnSuccessListener { barcodes ->
@@ -161,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                                     )
 
                                     populateBoardingPass(extractedData)
-                                } else{
+                                } else {
                                     scanningPaused = false
                                     return@addOnSuccessListener
                                 }
@@ -223,12 +224,12 @@ class MainActivity : AppCompatActivity() {
                 return false
             }
 
-            if(barcode.seatNumber.isNullOrEmpty()){
+            if (barcode.seatNumber.isNullOrEmpty()) {
                 validationUIResponse(false)
                 return false
             }
 
-            if(barcode.seatNumber == "000"){
+            if (barcode.seatNumber == "000") {
                 validationUIResponse(false)
                 return false
             }
@@ -252,13 +253,12 @@ class MainActivity : AppCompatActivity() {
                 val flightStatus = matchingFlight.jsonObject
                 return flightStatus["departureAirportFsCode"]?.toString()?.trim('"')
             } else {
-              return null
+                return null
             }
         }
 
         return null
     }
-
 
 
     fun clearDetails() {
@@ -305,7 +305,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             validationUIResponse(false)
             clearDetails()
-            return  null
+            return null
         }
     }
 
@@ -345,7 +345,7 @@ class MainActivity : AppCompatActivity() {
         val currentDate = LocalDate.now()
         var ticketDate = request.flightDate
         //if (ticketDate.isAfter(currentDate)) {
-         //   ticketDate = ticketDate.minusDays(1)
+        //   ticketDate = ticketDate.minusDays(1)
         //}
         val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         val strDate = ticketDate.format(dateFormat)
