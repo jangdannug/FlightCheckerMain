@@ -11,7 +11,7 @@ fun validateFlight(context: Context, barcode: BarcodeData): Boolean {
     return try {
         val db = DataBaseHandler(context)
 
-        val dbResult = db.getDataByFlightCode("BR6061")
+        val dbResult = db.getDataByFlightCode(barcode.flightIata)
 
         val currentDate = LocalDateTime.now()
 

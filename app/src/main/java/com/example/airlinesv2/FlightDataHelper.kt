@@ -1,20 +1,24 @@
 package com.example.airlinesv2
 
+import java.time.LocalDate
+
 class Flights {
     var flightIds: List<Int>  // List of integers for flightIds
     var flightCodes: List<String>  // List of strings for flightCodes
     var departureAirportFsCodes: List<String>  // List of strings for departureAirportFsCodes
     var departureDates: List<String>  // List of strings for departureDates
+    var queryDates: List<LocalDate>
 
     constructor(
         flightIds: List<Int>, flightCodes: List<String>,
-        departureAirportFsCodes: List<String>, departureDates: List<Any>
+        departureAirportFsCodes: List<String>, departureDates: List<Any>, queryDate: List<LocalDate>
 
     ) {
         this.flightIds = flightIds
         this.flightCodes = flightCodes
         this.departureAirportFsCodes = departureAirportFsCodes
         this.departureDates = departureDates as List<String>
+        this.queryDates = queryDate
     }
 }
 

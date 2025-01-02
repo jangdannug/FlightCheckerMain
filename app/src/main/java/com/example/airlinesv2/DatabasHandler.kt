@@ -10,6 +10,7 @@ import android.util.Log
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 const val DATABASE_NAME = "Flights"
 const val TABLE_NAME = "FlightStatuses"
@@ -17,6 +18,7 @@ const val COL_FlightId = "flightIds"
 const val COL_FlightCode = "FlightCode"
 const val COL_DepartureAirportFsCode = "DepartureAirportFsCode"
 const val COL_DepartureDate = "DepartureDate"
+const val  COL_QueryDate = "QueryDate"
 
 const val  TABLE_dataLogs = "dataLogs"
 const val COL_executeDt = "executeDt"
@@ -37,7 +39,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 "$COL_FlightId INTEGER PRIMARY KEY," +
                 "$COL_FlightCode TEXT," +
                 "$COL_DepartureAirportFsCode TEXT," +
-                "$COL_DepartureDate TEXT)"
+                "$COL_DepartureDate TEXT," +
+                "$COL_QueryDate TEXT)"
         db?.execSQL(createTable)
 
         // Create DataLogs table
@@ -64,7 +67,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             // Validate list sizes
             if (flights.flightIds.size != flights.flightCodes.size ||
                 flights.flightIds.size != flights.departureAirportFsCodes.size ||
-                flights.flightIds.size != flights.departureDates.size) {
+                flights.flightIds.size != flights.departureDates.size ||
+                flights.flightIds.size != flights.queryDates.size) {
                 Log.e("DB_INSERT", "List sizes are inconsistent")
                 return
             }
@@ -78,20 +82,22 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     put(COL_FlightCode, flights.flightCodes[i])
                     put(COL_DepartureAirportFsCode, flights.departureAirportFsCodes[i])
                     put(COL_DepartureDate, flights.departureDates[i])
+                    put(COL_QueryDate, flights.queryDates[i].format(DateTimeFormatter.ISO_LOCAL_DATE)) // Ensure queryDates is LocalDate
                 }
 
+                // Attempt to insert the record, ignoring conflicts
                 val result = db.insertWithOnConflict(
                     TABLE_NAME,
                     null,
                     values,
-                    SQLiteDatabase.CONFLICT_REPLACE // Replace if conflict on primary key
+                    SQLiteDatabase.CONFLICT_IGNORE // Ignore conflicts and continue inserting
                 )
 
                 if (result != -1L) {
                     successCount++
                 } else {
                     failureCount++
-                    Log.e("DB_INSERT", "Failed to insert data for flightId: ${flights.flightIds[i]}")
+                    Log.e("DB_INSERT", "Failed to insert data for flightId: ${flights.flightIds[i]} due to conflict or other issue.")
                 }
             }
 
@@ -99,10 +105,10 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             db.setTransactionSuccessful()
             Log.d("DB_INSERT", "Inserted: $successCount, Failed: $failureCount")
         } catch (e: Exception) {
-            Log.e("DB_INSERT", "Error during DB insert", e)
+            Log.e("DB_INSERT", "Error during DB insert: ${e.message}", e)
         } finally {
             db.endTransaction() // End the transaction
-            db.close()
+            db.close() // Ensure the database is closed
         }
     }
 
@@ -158,27 +164,51 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 return DbFlight("", "", "", "")
             }
 
+            // Query to get all results for the given flight code
             val query = "SELECT * FROM $TABLE_NAME WHERE $COL_FlightCode = ?"
             var cursor: Cursor? = null
 
             try {
                 cursor = db.rawQuery(query, arrayOf(flightCode))
 
-                if (cursor.moveToFirst()) {
-                    val flightId = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
-                    val flightCodeResult = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightCode))
-                    val departureAirportFsCode = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureAirportFsCode))
-                    val departureDate = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+                val currentDateTime = LocalDateTime.now() // Get current date and time
+                var preferredFlight: DbFlight? = null
+                var nextFlight: DbFlight? = null
 
-                    return DbFlight(
-                        flightIds = flightId,
-                        flightCodes = flightCodeResult,
-                        departureAirportFsCodes = departureAirportFsCode,
-                        departureDates = departureDate
-                    )
-                } else {
-                    Log.d("DB_QUERY", "No results found for flightCode: $flightCode")
+                if (cursor.moveToFirst()) {
+                    do {
+                        val flightId = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
+                        val flightCodeResult = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightCode))
+                        val departureAirportFsCode = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureAirportFsCode))
+                        val departureDate = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+
+                        // Parse the departure date to LocalDateTime for comparison
+                        val departureDateTime = LocalDateTime.parse(departureDate)
+
+                        // Check if the departure date matches the current date
+                        if (departureDateTime.toLocalDate() == currentDateTime.toLocalDate() && departureDateTime.isAfter(currentDateTime)) {
+                            // If it matches and is in the future, set it as preferredFlight
+                            preferredFlight = DbFlight(
+                                flightIds = flightId,
+                                flightCodes = flightCodeResult,
+                                departureAirportFsCodes = departureAirportFsCode,
+                                departureDates = departureDate
+                            )
+                            break // Exit the loop since we found a preferred flight
+                        } else if (departureDateTime.isAfter(currentDateTime)) {
+                            // If it's a future flight, consider it as a potential next flight
+                            nextFlight = DbFlight(
+                                flightIds = flightId,
+                                flightCodes = flightCodeResult,
+                                departureAirportFsCodes = departureAirportFsCode,
+                                departureDates = departureDate
+                            )
+                        }
+                    } while (cursor.moveToNext())
                 }
+
+                // Return the preferred flight if found, otherwise return the next flight
+                return preferredFlight ?: nextFlight ?: DbFlight("", "", "", "")
             } catch (e: Exception) {
                 Log.e("DB_ERROR", "Error fetching data for flightCode: $flightCode", e)
             } finally {
@@ -252,8 +282,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         cursor.close()
         return count
     }
-
-
 
 
     fun deleteDatabase(context: Context) {

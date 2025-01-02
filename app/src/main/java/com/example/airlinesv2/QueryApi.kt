@@ -2,7 +2,6 @@ package com.example.airlinesv2
 
 import android.content.Context
 import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -22,21 +21,25 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-    suspend fun queryApi(context : Context) {
-        val context = context
-        val db = DataBaseHandler(context)
+suspend fun queryApi(context: Context): Boolean {
+    val db = DataBaseHandler(context)
 
-        try {
+    return try {
+        var isUpdated = false
+        val checkUpdate = db.getLatestUpdate()
 
-            val  checkUpdate = db.getLatestUpdate()
+        if (!checkUpdate.isNullOrEmpty()) {
             val localDateTime = LocalDateTime.parse(checkUpdate)
-            val isUpdated = isCurrentTimeInInterval(localDateTime)
+            isUpdated = isTimeWithinLast30Minutes(localDateTime)
+        }
 
-            if (!isUpdated) {
+        if (!isUpdated) {
+            showCustomToast(context, "UPDATING PLEASE WAIT")
 
-                showCustomToast(context, "UPDATING PLEASE WAIT")
-                val jsonResponse = getApiAsync()
-                val jsonObject = jsonResponse?.let { Json.parseToJsonElement(jsonResponse).jsonObject }
+            val jsonResponses = getApiAsync()
+
+            jsonResponses.forEach { jsonResponse ->
+                val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
                 val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
 
                 if (!flightStatuses.isNullOrEmpty()) {
@@ -46,7 +49,7 @@ import java.time.format.DateTimeFormatter
                     val airportFsCode = getAirPortFsCode(flightStatuses)
                     val departureDt = getLatestDepartureDt(flightStatuses)
 
-                    //Mapping
+                    // Mapping
                     val flightIdInt = flightId.mapNotNull { it.toIntOrNull() }
 
                     val flightCodesMap = flightId.map { flightId ->
@@ -59,97 +62,113 @@ import java.time.format.DateTimeFormatter
                         airportFsCode[flightId] ?: ""
                     }
 
-
                     val departureDtMap = flightId.map { flightId ->
                         departureDt[flightId] ?: ""
                     }
+
+                    val currentLocalDate = LocalDate.now()
+                    val queryDateList = List(flightIdInt.size) { currentLocalDate }
 
                     val dbFlights = Flights(
                         flightIds = flightIdInt,
                         flightCodes = flightCodesMap,
                         departureAirportFsCodes = airportFsCodeMap,
-                        departureDates = departureDtMap
+                        departureDates = departureDtMap,
+                        queryDate = queryDateList
                     )
 
                     val currentDate = LocalDateTime.now().toString()
                     val flightIdsSize = dbFlights.flightIds.size
                     val execType = "update"
 
-                    val DbDataLogs = DbDataLogs(
+                    val dbDataLogs = DbDataLogs(
                         executeDt = currentDate,
                         dataSize = flightIdsSize.toString(),
-                        execType = execType.toString()
+                        execType = execType
                     )
 
-                    db.deleteDatabase(context)
+                    // Uncomment this line if you want to delete the database
+                    // db.deleteDatabase(context)
 
                     db.insertFlights(dbFlights)
-                    db.insertDataLogs(DbDataLogs)
+                    db.insertDataLogs(dbDataLogs)
 
+                } else {
+                    println("No flight statuses found in the response.") // Log the absence of flight statuses
                 }
             }
-            return
-        } catch (e: Exception) {
-                Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
-            }
-
+        }
+        true // Return true if everything went well
+    } catch (e: Exception) {
+        Log.e("ERROR_dbProcessSave", "Error Exception: ${e.message}", e)
+        false // Return false if an error occurred
     }
+}
 
-    suspend fun getApiAsync(): String? {
-        val baseUrl =
-            "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
+suspend fun getApiAsync(): List<String?> {
+    val baseUrl = "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
 
-        val currentDate = LocalDate.now()
-        val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd/")
-        val reqHours = 8
-        val numberHours = 6
-        val currDate = currentDate.format(dateFormat)
-        val appId = "6acd1100"
-        val appKey = "a287bbec7d155e99d39eae55fe341828"
+    // Get current date and the next date
+    val currentDate = LocalDate.now()
+    val nextDate = currentDate.plusDays(1)
 
-        val url =
-            "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}"
+    // Date format for the API request
+    val dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd/")
+    val numberHours = 6
+    val appId = "6acd1100"
+    val appKey = "a287bbec7d155e99d39eae55fe341828"
 
-        return withContext(Dispatchers.IO) {
-            try {
-                val connection = URL(url).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connect()
+    // List of request hours
+    val reqHoursList = listOf(0, 6, 12, 18)
+    val responses = mutableListOf<String?>()
 
-                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
-                    // Return the raw JSON string instead of deserializing
-                    jsonString
-                } else {
-                    println("\tERROR: Response Code ${connection.responseCode}")
+    // Function to make requests for a given date
+    suspend fun makeRequestsForDate(date: LocalDate) {
+        val currDate = date.format(dateFormat)
+
+        // Make requests for each hour
+        for (reqHours in reqHoursList) {
+            val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}"
+
+            val response = withContext(Dispatchers.IO) {
+                try {
+                    val connection = URL(url).openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.connect()
+
+                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                        val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
+                        jsonString // Return the raw JSON string
+                    } else {
+                        println("\tERROR: Response Code ${connection.responseCode}")
+                        null
+                    }
+                } catch (e: Exception) {
+                    println("\tERROR: ${e.message}")
                     null
                 }
-            } catch (e: Exception) {
-                println("\tERROR: ${e.message}")
-                null
             }
+
+            responses.add(response) // Add the response to the list
         }
     }
 
-fun isCurrentTimeInInterval(dateTime: LocalDateTime): Boolean {
-    val time = dateTime.toLocalTime()
-    val date = dateTime.toLocalDate()
+    // Make requests for the current date and the next date
+    makeRequestsForDate(currentDate)
+    makeRequestsForDate(nextDate)
 
-    // Check if the date is today
-    val today = LocalDate.now()
+    return responses // Return the list of responses for both dates
+}
 
-    // If the date is today, check the time intervals
-    return if (date.isEqual(today)) {
-        when {
-            time.isAfter(LocalTime.of(0, 0)) && time.isBefore(LocalTime.of(6, 0)) -> true // 12:00 AM to 6:00 AM
-            time.isAfter(LocalTime.of(6, 0)) && time.isBefore(LocalTime.of(12, 0)) -> true // 6:00 AM to 12:00 PM
-            time.isAfter(LocalTime.of(12, 0)) && time.isBefore(LocalTime.of(18, 0)) -> true // 12:00 PM to 6:00 PM
-            time.isAfter(LocalTime.of(18, 0)) && time.isBefore(LocalTime.of(24, 0)) -> true // 6:00 PM to 12:00 AM
-            else -> false // Invalid time
-        }
-    } else {
-        false // The date is not today
-    }
+fun isTimeWithinLast30Minutes(dateTime: LocalDateTime): Boolean {
+    // Get the current time
+    val currentTime = LocalDateTime.now()
+
+    // Calculate the time 30 minutes ago
+    val thirtyMinutesAgo = currentTime.minusMinutes(30)
+
+    // Check if the given dateTime is more than 30 minutes in the past
+    return !dateTime.isBefore(thirtyMinutesAgo)
 }
 
     fun showCustomToast(context: Context, message: String) {
@@ -174,7 +193,7 @@ fun isCurrentTimeInInterval(dateTime: LocalDateTime): Boolean {
         // Handler for blinking effect
         val handler = Handler()
         var isVisible = true
-        val blinkInterval = 800L // Blink every 500 milliseconds
+        val blinkInterval = 400L // Blink every 500 milliseconds
         val totalDuration = 20000L // Total duration of 30 seconds
 
         // Runnable to handle the blinking effect

@@ -174,10 +174,18 @@ class MainActivity : AppCompatActivity() {
                                         if (preValidateBarcode(extractedData))
                                         {
                                             val context: Context = applicationContext
-                                            queryApi(context)
-                                            val isValidFlight = validateFlight(context,extractedData)
-                                            validationUIResponse(isValidFlight)
+                                            val queryRes = queryApi(context)
+                                            if (queryRes) {
+                                                val isValidFlight =
+                                                    validateFlight(context, extractedData)
+                                                validationUIResponse(isValidFlight)
+                                            }
 
+                                            val db = DataBaseHandler(context)
+                                            var code = extractedData.flightIata
+                                           val dataTest = db.getDataByFlightCode("TR2")
+                                           test1.text = "flightID: ${dataTest.flightIds} FlightCode: ${dataTest.departureAirportFsCodes}"
+                                            test2.text = "flightCode: ${dataTest.flightCodes} flightDate: ${dataTest.departureDates}"
                                             delay(3000)
                                             scanningPaused = false
                                             clearDetails()
