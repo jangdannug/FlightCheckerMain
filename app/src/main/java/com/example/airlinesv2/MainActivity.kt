@@ -183,7 +183,7 @@ class MainActivity : AppCompatActivity() {
 
                                             val db = DataBaseHandler(context)
                                             var code = extractedData.flightIata
-                                           val dataTest = db.getDataByFlightCode("TR2")
+                                           val dataTest = db.getDataByFlightCode(extractedData)
                                            test1.text = "flightID: ${dataTest.flightIds} FlightCode: ${dataTest.departureAirportFsCodes}"
                                             test2.text = "flightCode: ${dataTest.flightCodes} flightDate: ${dataTest.departureDates}"
                                             delay(3000)

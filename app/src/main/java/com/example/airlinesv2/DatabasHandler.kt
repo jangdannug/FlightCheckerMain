@@ -154,10 +154,11 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-    fun getDataByFlightCode(flightCode: String): DbFlight {
+    fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight {
         try {
             val db = this.readableDatabase
 
+            val ticketDate = barcodeData.flightDate // Assuming ticketDate is in the same format as departureDate
             // Check if the table exists
             if (!checkIfTableExists(db, TABLE_NAME)) {
                 Log.e("DB_ERROR", "Table $TABLE_NAME does not exist in the database")
@@ -169,7 +170,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             var cursor: Cursor? = null
 
             try {
-                cursor = db.rawQuery(query, arrayOf(flightCode))
+                cursor = db.rawQuery(query, arrayOf(barcodeData.flightIata))
 
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
@@ -185,9 +186,9 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                         // Parse the departure date to LocalDateTime for comparison
                         val departureDateTime = LocalDateTime.parse(departureDate)
 
-                        // Check if the departure date matches the current date
-                        if (departureDateTime.toLocalDate() == currentDateTime.toLocalDate() && departureDateTime.isAfter(currentDateTime)) {
-                            // If it matches and is in the future, set it as preferredFlight
+                        // Check if the departure date matches the ticket date
+                        if (departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
+                            // If it matches, set it as preferredFlight
                             preferredFlight = DbFlight(
                                 flightIds = flightId,
                                 flightCodes = flightCodeResult,
@@ -210,7 +211,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 // Return the preferred flight if found, otherwise return the next flight
                 return preferredFlight ?: nextFlight ?: DbFlight("", "", "", "")
             } catch (e: Exception) {
-                Log.e("DB_ERROR", "Error fetching data for flightCode: $flightCode", e)
+                Log.e("DB_ERROR", "Error fetching data for flightCode: ${barcodeData.flightIata}", e)
             } finally {
                 cursor?.close()
             }
