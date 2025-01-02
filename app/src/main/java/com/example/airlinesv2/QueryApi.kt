@@ -19,6 +19,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
     suspend fun queryApi(context : Context) {
@@ -29,9 +30,9 @@ import java.time.format.DateTimeFormatter
 
             val  checkUpdate = db.getLatestUpdate()
             val localDateTime = LocalDateTime.parse(checkUpdate)
-            val isUpdated = db.isCurrentTimeInInterval(localDateTime)
+            val isUpdated = isCurrentTimeInInterval(localDateTime)
 
-            if (isUpdated) {
+            if (!isUpdated) {
 
                 showCustomToast(context, "UPDATING PLEASE WAIT")
                 val jsonResponse = getApiAsync()
@@ -130,6 +131,26 @@ import java.time.format.DateTimeFormatter
         }
     }
 
+fun isCurrentTimeInInterval(dateTime: LocalDateTime): Boolean {
+    val time = dateTime.toLocalTime()
+    val date = dateTime.toLocalDate()
+
+    // Check if the date is today
+    val today = LocalDate.now()
+
+    // If the date is today, check the time intervals
+    return if (date.isEqual(today)) {
+        when {
+            time.isAfter(LocalTime.of(0, 0)) && time.isBefore(LocalTime.of(6, 0)) -> true // 12:00 AM to 6:00 AM
+            time.isAfter(LocalTime.of(6, 0)) && time.isBefore(LocalTime.of(12, 0)) -> true // 6:00 AM to 12:00 PM
+            time.isAfter(LocalTime.of(12, 0)) && time.isBefore(LocalTime.of(18, 0)) -> true // 12:00 PM to 6:00 PM
+            time.isAfter(LocalTime.of(18, 0)) && time.isBefore(LocalTime.of(24, 0)) -> true // 6:00 PM to 12:00 AM
+            else -> false // Invalid time
+        }
+    } else {
+        false // The date is not today
+    }
+}
 
     fun showCustomToast(context: Context, message: String) {
 

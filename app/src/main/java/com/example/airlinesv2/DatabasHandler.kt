@@ -253,26 +253,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         return count
     }
 
-    fun isCurrentTimeInInterval(dateTime: LocalDateTime): Boolean {
-        val time = dateTime.toLocalTime()
-        val date = dateTime.toLocalDate()
 
-        // Check if the date is today
-        val today = LocalDate.now()
-
-        // If the date is today, check the time intervals
-        return if (date.isEqual(today)) {
-            when {
-                time.isAfter(LocalTime.of(0, 0)) && time.isBefore(LocalTime.of(6, 0)) -> true // 12:00 AM to 6:00 AM
-                time.isAfter(LocalTime.of(6, 0)) && time.isBefore(LocalTime.of(12, 0)) -> true // 6:00 AM to 12:00 PM
-                time.isAfter(LocalTime.of(12, 0)) && time.isBefore(LocalTime.of(18, 0)) -> true // 12:00 PM to 6:00 PM
-                time.isAfter(LocalTime.of(18, 0)) && time.isBefore(LocalTime.of(24, 0)) -> true // 6:00 PM to 12:00 AM
-                else -> false // Invalid time
-            }
-        } else {
-            false // The date is not today
-        }
-    }
 
 
     fun deleteDatabase(context: Context) {
