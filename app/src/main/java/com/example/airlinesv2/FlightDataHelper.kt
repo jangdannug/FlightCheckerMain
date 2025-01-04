@@ -1,22 +1,23 @@
 package com.example.airlinesv2
 
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 class Flights {
     var flightIds: List<Int>  // List of integers for flightIds
-    var flightCodes: List<String>  // List of strings for flightCodes
-    var departureAirportFsCodes: List<String>  // List of strings for departureAirportFsCodes
+    var carrierFsCode: List<String>  // List of strings for flightCodes
+    var flightNumber: List<String>  // List of strings for departureAirportFsCodes
     var departureDates: List<String>  // List of strings for departureDates
-    var queryDates: List<LocalDate>
+    var queryDates: List<LocalDateTime>
 
     constructor(
-        flightIds: List<Int>, flightCodes: List<String>,
-        departureAirportFsCodes: List<String>, departureDates: List<Any>, queryDate: List<LocalDate>
+        flightIds: List<Int>, carrierFsCode: List<String>,
+        flightNumber: List<String>, departureDates: List<Any>, queryDate: List<LocalDateTime>
 
     ) {
         this.flightIds = flightIds
-        this.flightCodes = flightCodes
-        this.departureAirportFsCodes = departureAirportFsCodes
+        this.carrierFsCode = carrierFsCode
+        this.flightNumber = flightNumber
         this.departureDates = departureDates as List<String>
         this.queryDates = queryDate
     }
@@ -25,17 +26,17 @@ class Flights {
 
 class DbFlight{
     var flightIds: String
-    var flightCodes: String
-    var departureAirportFsCodes: String
+    var carrierFsCode: String
+    var flightNumber: String
     var departureDates: String
 
     constructor(
-        flightIds: String, flightCodes: String,
-        departureAirportFsCodes: String, departureDates: String
+        flightIds: String, carrierFsCode: String,
+        flightNumber: String, departureDates: String
     ) {
         this.flightIds = flightIds
-        this.flightCodes = flightCodes
-        this.departureAirportFsCodes = departureAirportFsCodes
+        this.carrierFsCode = carrierFsCode
+        this.flightNumber = flightNumber
         this.departureDates = departureDates
     }
 }

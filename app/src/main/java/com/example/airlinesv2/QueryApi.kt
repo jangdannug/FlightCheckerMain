@@ -18,7 +18,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 suspend fun queryApi(context: Context): Boolean {
@@ -29,8 +28,8 @@ suspend fun queryApi(context: Context): Boolean {
         val checkUpdate = db.getLatestUpdate()
 
         if (!checkUpdate.isNullOrEmpty()) {
-            val localDateTime = LocalDateTime.parse(checkUpdate)
-            isUpdated = isTimeWithinLast30Minutes(localDateTime)
+            val dbUpdateDt = LocalDateTime.parse(checkUpdate)
+            isUpdated = isTimeWithinLast30Minutes(dbUpdateDt)
         }
 
         if (!isUpdated) {
@@ -38,43 +37,60 @@ suspend fun queryApi(context: Context): Boolean {
 
             val jsonResponses = getApiAsync()
 
+            //db.deleteDatabase(context)
+            db.deleteFlightData()
+            db.deleteDataLogsData()
+
             jsonResponses.forEach { jsonResponse ->
                 val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
                 val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
 
                 if (!flightStatuses.isNullOrEmpty()) {
                     val flightId = getFlightId(flightStatuses)
-                    val fsCode = getFsCode(flightStatuses)
+                    val carrierFsCode = getFsCode(flightStatuses)
                     val flightNumber = getFlightNumber(flightStatuses)
-                    val airportFsCode = getAirPortFsCode(flightStatuses)
                     val departureDt = getLatestDepartureDt(flightStatuses)
 
                     // Mapping
-                    val flightIdInt = flightId.mapNotNull { it.toIntOrNull() }
+                    val flightIdMap = flightId.mapNotNull { it.toIntOrNull() }
 
-                    val flightCodesMap = flightId.map { flightId ->
-                        val carrierFsCode = fsCode[flightId] ?: ""
-                        val flightNumber = flightNumber[flightId] ?: ""
-                        "$carrierFsCode$flightNumber"
+                    val carrierFsCodeMap = flightId.map { flightId ->
+                        val carrierFsCode = (carrierFsCode[flightId] ?: "")
+
+                        var code = carrierFsCode
+                        var fixFscode = ""
+                        if (code.contains("*") == true) {
+                            // Handle the case where there was an asterisk
+                            println("Warning: Flight ID $flightId has an asterisk in the carrier code.")
+                            fixFscode =  code.replace("*","")
+
+                        }else{
+                            fixFscode = code
+                        }
+
+                        "$fixFscode"
+
                     }
 
-                    val airportFsCodeMap = flightId.map { flightId ->
-                        airportFsCode[flightId] ?: ""
+                    val flightNumberMap = flightId.map { flightId ->
+                        flightNumber[flightId] ?: ""
                     }
 
                     val departureDtMap = flightId.map { flightId ->
                         departureDt[flightId] ?: ""
                     }
 
-                    val currentLocalDate = LocalDate.now()
-                    val queryDateList = List(flightIdInt.size) { currentLocalDate }
+                    val currentLocalDate = LocalDateTime.now()
+                    val queryDateListMap = List(flightIdMap.size) { currentLocalDate }
+
+
 
                     val dbFlights = Flights(
-                        flightIds = flightIdInt,
-                        flightCodes = flightCodesMap,
-                        departureAirportFsCodes = airportFsCodeMap,
+                        flightIds = flightIdMap,
+                        carrierFsCode = carrierFsCodeMap,
+                        flightNumber = flightNumberMap,
                         departureDates = departureDtMap,
-                        queryDate = queryDateList
+                        queryDate = queryDateListMap
                     )
 
                     val currentDate = LocalDateTime.now().toString()
@@ -160,7 +176,7 @@ suspend fun getApiAsync(): List<String?> {
     return responses // Return the list of responses for both dates
 }
 
-fun isTimeWithinLast30Minutes(dateTime: LocalDateTime): Boolean {
+fun isTimeWithinLast30Minutes(dbUpdateDt: LocalDateTime): Boolean {
     // Get the current time
     val currentTime = LocalDateTime.now()
 
@@ -168,7 +184,7 @@ fun isTimeWithinLast30Minutes(dateTime: LocalDateTime): Boolean {
     val thirtyMinutesAgo = currentTime.minusMinutes(30)
 
     // Check if the given dateTime is more than 30 minutes in the past
-    return !dateTime.isBefore(thirtyMinutesAgo)
+    return !dbUpdateDt.isBefore(thirtyMinutesAgo)
 }
 
     fun showCustomToast(context: Context, message: String) {

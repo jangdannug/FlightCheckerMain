@@ -184,8 +184,10 @@ class MainActivity : AppCompatActivity() {
                                             val db = DataBaseHandler(context)
                                             var code = extractedData.flightIata
                                            val dataTest = db.getDataByFlightCode(extractedData)
-                                           test1.text = "flightID: ${dataTest.flightIds} FlightCode: ${dataTest.departureAirportFsCodes}"
-                                            test2.text = "flightCode: ${dataTest.flightCodes} flightDate: ${dataTest.departureDates}"
+                                           test1.text = "flightID: ${dataTest.flightIds}\n " +
+                                                   "CarrierFsCode: ${dataTest.carrierFsCode}\n" +
+                                                   "FlightNumber: ${dataTest.flightNumber}"
+                                            test2.text = "flightDate: ${dataTest.departureDates}"
                                             delay(3000)
                                             scanningPaused = false
                                             clearDetails()
