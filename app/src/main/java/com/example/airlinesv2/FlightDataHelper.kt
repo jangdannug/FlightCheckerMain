@@ -55,6 +55,18 @@ class DbDataLogs{
     }
 }
 
+class DbFsCodes{
+    var fsCode: String
+    var iataCode: String
+
+    constructor(
+        fsCode: String, iataCode: String
+    ){
+        this.fsCode = fsCode
+        this.iataCode = iataCode
+    }
+}
+
 class DbDataFlight{
     var flightId: String
     var flightCode: String

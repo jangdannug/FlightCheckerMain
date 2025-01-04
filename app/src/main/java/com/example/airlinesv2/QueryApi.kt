@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import getAppendix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -44,6 +45,11 @@ suspend fun queryApi(context: Context): Boolean {
             jsonResponses.forEach { jsonResponse ->
                 val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
                 val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
+                val dbFsCodesList = getAppendix(jsonObject)
+
+                db.insertCodes(dbFsCodesList)
+                var test = dbFsCodesList
+
 
                 if (!flightStatuses.isNullOrEmpty()) {
                     val flightId = getFlightId(flightStatuses)
@@ -84,7 +90,6 @@ suspend fun queryApi(context: Context): Boolean {
                     val queryDateListMap = List(flightIdMap.size) { currentLocalDate }
 
 
-
                     val dbFlights = Flights(
                         flightIds = flightIdMap,
                         carrierFsCode = carrierFsCodeMap,
@@ -103,11 +108,16 @@ suspend fun queryApi(context: Context): Boolean {
                         execType = execType
                     )
 
+                 //   val  dbFsCodes = DbFsCodes(
+                   // )
+
                     // Uncomment this line if you want to delete the database
                     // db.deleteDatabase(context)
 
                     db.insertFlights(dbFlights)
+                    //db.insertCodes()
                     db.insertDataLogs(dbDataLogs)
+
 
                 } else {
                     println("No flight statuses found in the response.") // Log the absence of flight statuses

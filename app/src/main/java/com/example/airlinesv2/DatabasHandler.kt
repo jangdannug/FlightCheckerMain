@@ -24,6 +24,10 @@ const val COL_executeDt = "executeDt"
 const val COL_dataSize = "dataSize"
 const val COL_execType = "execType"
 
+const val TABLE_Codes = "FlightCodes"
+const val COL_FsCode = "FsCode"
+const val COL_Iata = "Iata"
+
 class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,null,1) {
 
     init {
@@ -49,11 +53,19 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 "$COL_execType TEXT)"
 
         db?.execSQL(createTableDataLogs)
+
+        val createTableCodes = "CREATE TABLE $TABLE_Codes (" +
+                "$COL_FsCode TEXT," +
+                "$COL_Iata TEXT)"
+
+        db?.execSQL(createTableCodes)
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
         db?.execSQL("DROP TABLE IF EXISTS $TABLE_FlightStatuses")  // Drop the existing table if it exists
         db?.execSQL("DROP TABLE IF EXISTS $TABLE_dataLogs")  // Drop another table if it exists
+        db?.execSQL("DROP TABLE IF EXISTS $TABLE_Codes")  // Drop another table if it exists
+
         onCreate(db)  // Recreate the tables as defined in the onCreate method
     }
 
@@ -178,12 +190,83 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         }
     }
 
+
+    @SuppressLint("SuspiciousIndentation", "Range")
+    fun insertCodes(fsCodesList: List<DbFsCodes>) {
+        val db = this.writableDatabase
+        db.beginTransaction()
+
+        try {
+            for (fsCodes in fsCodesList) {
+                // Check if the data already exists
+                val cursor = db.query(
+                    TABLE_Codes,
+                    null,
+                    "$COL_FsCode = ?", // Use the correct column name
+                    arrayOf(fsCodes.fsCode),
+                    null,
+                    null,
+                    null
+                )
+
+                if (cursor != null) {
+                    if (cursor.count > 0) {
+                        cursor.moveToFirst()
+                        val existingIata = cursor.getString(cursor.getColumnIndex(COL_Iata))
+                        if (existingIata != fsCodes.iataCode) {
+                            // Update the data if it has changed
+                            val values = ContentValues().apply {
+                                put(COL_Iata, fsCodes.iataCode)
+                            }
+                            val rowsAffected = db.update(
+                                TABLE_Codes,
+                                values,
+                                "$COL_FsCode = ?", // Use the correct column name
+                                arrayOf(fsCodes.fsCode)
+                            )
+                            if (rowsAffected > 0) {
+                                Log.d("DB_UPDATE", "Data updated successfully.")
+                            } else {
+                                Log.e("DB_UPDATE", "Failed to update data.")
+                            }
+                        } else {
+                            Log.d("DB_NO_CHANGE", "No changes detected.")
+                        }
+                    } else {
+                        // Insert new data
+                        val values = ContentValues().apply {
+                            put(COL_FsCode, fsCodes.fsCode)
+                            put(COL_Iata, fsCodes.iataCode)
+                        }
+                        val newRowId = db.insert(TABLE_Codes, null, values)
+                        if (newRowId != -1L) {
+                            Log.d("DB_INSERT", "Data inserted successfully with row ID: $newRowId")
+                        } else {
+                            Log.e("DB_INSERT", "Failed to insert new data.")
+                        }
+                    }
+                    cursor.close() // Close the cursor after use
+                }
+            }
+            db.setTransactionSuccessful()
+        } catch (e: Exception) {
+            Log.e("DB_ERROR", "Error inserting or updating data", e)
+        } finally {
+            // Ensure the transaction is ended properly
+            db.endTransaction()
+            db.close()
+        }
+    }
+
+
     fun checkIfTableExists(db: SQLiteDatabase, tableName: String): Boolean {
         val query = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
         val cursor = db.rawQuery(query, arrayOf(tableName))
         val exists = cursor.count > 0
         return exists
     }
+
+
 
 
     fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight {
@@ -198,11 +281,18 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             }
 
             // Query to get all results for the given flight code
-            val query = "SELECT * FROM $TABLE_FlightStatuses WHERE $COL_FlightNumber = ?"
+            //val query = "SELECT * FROM $TABLE_FlightStatuses WHERE $COL_FlightNumber = ?"
+
+            val query = """
+    SELECT * 
+    FROM $TABLE_FlightStatuses AS fs
+    JOIN $TABLE_Codes AS fc ON fs.$COL_CarrierFsCode = fc.$COL_FsCode
+    WHERE fs.$COL_FlightNumber = ?
+"""
             var cursor: Cursor? = null
 
             try {
-                cursor = db.rawQuery(query, arrayOf(barcodeData.flightIata))
+                cursor = db.rawQuery(query, arrayOf(barcodeData.flightNumber))
 
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
@@ -211,8 +301,9 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 if (cursor.moveToFirst()) {
                     do {
                         val flightId = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
-                        val carrierFsCode = cursor.getString(cursor.getColumnIndexOrThrow(COL_CarrierFsCode))
-                        val flightNumber = cursor.getString(cursor.getColumnIndexOrThrow(COL_CarrierFsCode))
+                        val carrierFsCode = cursor.getString(cursor.getColumnIndexOrThrow(COL_Iata))
+                        val flightNumber = cursor.getString(cursor.getColumnIndexOrThrow(
+                            COL_FlightNumber))
                         val departureDate = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
 
                         // Parse the departure date to LocalDateTime for comparison
@@ -253,6 +344,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
         return DbFlight("", "", "", "")
     }
+
 
 
     fun getLatestUpdate(): String? {
@@ -296,6 +388,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         return null
     }
 
+
+
     fun countDataLogs(): Int {
         val db = this.readableDatabase
         val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_dataLogs", null)
@@ -304,6 +398,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         cursor.close()
         return count
     }
+
+
 
     fun countFlights(): Int {
         val db = this.readableDatabase
@@ -315,6 +411,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         cursor.close()
         return count
     }
+
 
 
     fun deleteDatabase(context: Context) {
