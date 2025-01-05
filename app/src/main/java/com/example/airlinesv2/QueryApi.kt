@@ -30,7 +30,7 @@ suspend fun queryApi(context: Context): Boolean {
 
         if (!checkUpdate.isNullOrEmpty()) {
             val dbUpdateDt = LocalDateTime.parse(checkUpdate)
-            isUpdated = isTimeWithinLast30Minutes(dbUpdateDt)
+            isUpdated = isTimeWithinLast60Minutes(dbUpdateDt)
         }
 
         if (!isUpdated) {
@@ -39,6 +39,7 @@ suspend fun queryApi(context: Context): Boolean {
             val jsonResponses = getApiAsync()
 
             //db.deleteDatabase(context)
+            db.deleteFlightCodesData()
             db.deleteFlightData()
             db.deleteDataLogsData()
 
@@ -186,14 +187,12 @@ suspend fun getApiAsync(): List<String?> {
     return responses // Return the list of responses for both dates
 }
 
-fun isTimeWithinLast30Minutes(dbUpdateDt: LocalDateTime): Boolean {
+fun isTimeWithinLast60Minutes(dbUpdateDt: LocalDateTime): Boolean {
     // Get the current time
     val currentTime = LocalDateTime.now()
 
-    // Calculate the time 30 minutes ago
-    val thirtyMinutesAgo = currentTime.minusMinutes(30)
+    val thirtyMinutesAgo = currentTime.minusMinutes(60)
 
-    // Check if the given dateTime is more than 30 minutes in the past
     return !dbUpdateDt.isBefore(thirtyMinutesAgo)
 }
 

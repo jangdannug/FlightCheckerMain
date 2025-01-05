@@ -69,41 +69,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         onCreate(db)  // Recreate the tables as defined in the onCreate method
     }
 
- fun  deleteFlightData()
- {
-     val db = this.writableDatabase
 
-     try {
-         db.beginTransaction()
-
-         db.execSQL("DELETE FROM $TABLE_FlightStatuses")
-         db.setTransactionSuccessful()
-     } catch (e: Exception) {
-        Log.e("DB_INSERT", "Error during DB insert:")
-    } finally {
-        db.endTransaction() // End the transaction
-        db.close() // Ensure the database is closed
-    }
-
- }
-
-    fun  deleteDataLogsData()
-    {
-        val db = this.writableDatabase
-
-        try {
-            db.beginTransaction()
-
-            db.execSQL("DELETE FROM $TABLE_dataLogs")
-            db.setTransactionSuccessful()
-        } catch (e: Exception) {
-            Log.e("DB_INSERT", "Error during DB insert:")
-        } finally {
-            db.endTransaction() // End the transaction
-            db.close() // Ensure the database is closed
-        }
-
-    }
 
     fun insertFlights(flights: Flights) {
         val db = this.writableDatabase
@@ -279,20 +245,30 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 Log.e("DB_ERROR", "Table $TABLE_FlightStatuses does not exist in the database")
                 return DbFlight("", "", "", "")
             }
+            barcodeData.flightIata
+            barcodeData.flightNumber
 
-            // Query to get all results for the given flight code
-            //val query = "SELECT * FROM $TABLE_FlightStatuses WHERE $COL_FlightNumber = ?"
 
             val query = """
     SELECT * 
     FROM $TABLE_FlightStatuses AS fs
     JOIN $TABLE_Codes AS fc ON fs.$COL_CarrierFsCode = fc.$COL_FsCode
-    WHERE fs.$COL_FlightNumber = ?
+    WHERE fs.$COL_FlightNumber = ? and fc.$COL_Iata = ?
 """
             var cursor: Cursor? = null
 
+            var flightNumber = barcodeData.flightNumber
+
+            if (flightNumber.startsWith("000")) {
+                flightNumber = flightNumber.substring(3)
+            }else if (flightNumber.startsWith("00")){
+                flightNumber = flightNumber.substring(2)
+            }else if (flightNumber.startsWith("0")){
+                flightNumber = flightNumber.substring(1)
+            }
+
             try {
-                cursor = db.rawQuery(query, arrayOf(barcodeData.flightNumber))
+                cursor = db.rawQuery(query, arrayOf(flightNumber, barcodeData.airlineCode))
 
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
@@ -413,6 +389,59 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
+    fun  deleteFlightData()
+    {
+        val db = this.writableDatabase
+
+        try {
+            db.beginTransaction()
+
+            db.execSQL("DELETE FROM $TABLE_FlightStatuses")
+            db.setTransactionSuccessful()
+        } catch (e: Exception) {
+            Log.e("DB_INSERT", "Error during DB insert:")
+        } finally {
+            db.endTransaction() // End the transaction
+            db.close() // Ensure the database is closed
+        }
+
+    }
+
+    fun  deleteDataLogsData()
+    {
+        val db = this.writableDatabase
+
+        try {
+            db.beginTransaction()
+
+            db.execSQL("DELETE FROM $TABLE_dataLogs")
+            db.setTransactionSuccessful()
+        } catch (e: Exception) {
+            Log.e("DB_INSERT", "Error during DB insert:")
+        } finally {
+            db.endTransaction() // End the transaction
+            db.close() // Ensure the database is closed
+        }
+
+    }
+
+    fun  deleteFlightCodesData()
+    {
+        val db = this.writableDatabase
+
+        try {
+            db.beginTransaction()
+
+            db.execSQL("DELETE FROM $TABLE_Codes")
+            db.setTransactionSuccessful()
+        } catch (e: Exception) {
+            Log.e("DB_INSERT", "Error during DB insert:")
+        } finally {
+            db.endTransaction() // End the transaction
+            db.close() // Ensure the database is closed
+        }
+
+    }
 
     fun deleteDatabase(context: Context) {
         context.deleteDatabase(DATABASE_NAME)
