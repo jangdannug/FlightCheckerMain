@@ -236,6 +236,9 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
     fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight {
+
+
+
         try {
             val db = this.readableDatabase
 
@@ -288,22 +291,19 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                         // Check if the departure date matches the ticket date
                         if (departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
                             // If it matches, set it as preferredFlight
-                            preferredFlight = DbFlight(
-                                flightIds = flightId,
-                                carrierFsCode = carrierFsCode,
-                                flightNumber = flightNumber,
-                                departureDates = departureDate
-                            )
-                            break // Exit the loop since we found a preferred flight
-                        } else if (departureDateTime.isAfter(currentDateTime)) {
-                            // If it's a future flight, consider it as a potential next flight
-                            nextFlight = DbFlight(
-                                flightIds = flightId,
-                                carrierFsCode = carrierFsCode,
-                                flightNumber = flightNumber,
-                                departureDates = departureDate
-                            )
+                            if (departureDateTime.isAfter(currentDateTime) &&
+                                (preferredFlight == null ||
+                                        departureDateTime.isBefore(LocalDateTime.parse(preferredFlight.departureDates)))) {
+                                preferredFlight = DbFlight(
+                                    flightIds = flightId,
+                                    carrierFsCode = carrierFsCode,
+                                    flightNumber = flightNumber,
+                                    departureDates = departureDate
+                                )
+                            }
+                            //break // Exit the loop since we found a preferred flight
                         }
+
                     } while (cursor.moveToNext())
                 }
 
