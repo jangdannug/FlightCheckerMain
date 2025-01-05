@@ -234,9 +234,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
 
-
     fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight {
-
 
 
         try {
@@ -273,9 +271,15 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             try {
                 cursor = db.rawQuery(query, arrayOf(flightNumber, barcodeData.airlineCode))
 
+                //cursor = db.rawQuery(query, arrayOf("279", "SQ"))
+                //cursor = db.rawQuery(query, arrayOf("681", "IX"))
+
+
+
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
-                var nextFlight: DbFlight? = null
+                var closestFlight: DbFlight? = null
+
 
                 if (cursor.moveToFirst()) {
                     do {
@@ -303,12 +307,21 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                             }
                             //break // Exit the loop since we found a preferred flight
                         }
-
+                        // Track the closest flight regardless of whether it's in the past or future
+                        if (closestFlight == null ||
+                            departureDateTime.isBefore(LocalDateTime.parse(closestFlight.departureDates))) {
+                            closestFlight = DbFlight(
+                                flightIds = flightId,
+                                carrierFsCode = carrierFsCode,
+                                flightNumber = flightNumber,
+                                departureDates = departureDate
+                            )
+                        }
                     } while (cursor.moveToNext())
                 }
 
                 // Return the preferred flight if found, otherwise return the next flight
-                return preferredFlight ?: nextFlight ?: DbFlight("", "", "", "")
+                return preferredFlight ?: closestFlight ?: DbFlight("", "", "", "")
             } catch (e: Exception) {
                 Log.e("DB_ERROR", "Error fetching data for flightCode: ${barcodeData.flightIata}", e)
             } finally {
