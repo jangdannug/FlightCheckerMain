@@ -38,7 +38,7 @@ suspend fun queryApi(context: Context): Boolean {
 
             val jsonResponses = getApiAsync()
 
-            //db.deleteDatabase(context)
+         //   db.deleteDatabase(context)
             db.deleteFlightCodesData()
             db.deleteFlightData()
             db.deleteDataLogsData()

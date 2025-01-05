@@ -169,7 +169,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     TABLE_Codes,
                     null,
                     "$COL_FsCode = ?", // Use the correct column name
-                    arrayOf(fsCodes.fsCode),
+                    arrayOf(fsCodes.fsCode), // Ensure fsCode is passed correctly
                     null,
                     null,
                     null
@@ -178,7 +178,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 if (cursor != null) {
                     if (cursor.count > 0) {
                         cursor.moveToFirst()
-                        val existingIata = cursor.getString(cursor.getColumnIndex(COL_Iata))
+                        val existingIata = cursor.getString(cursor.getColumnIndex(COL_Iata)) // Get existing IATA code
                         if (existingIata != fsCodes.iataCode) {
                             // Update the data if it has changed
                             val values = ContentValues().apply {
@@ -188,7 +188,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                                 TABLE_Codes,
                                 values,
                                 "$COL_FsCode = ?", // Use the correct column name
-                                arrayOf(fsCodes.fsCode)
+                                arrayOf(fsCodes.fsCode) // Ensure fsCode is passed correctly
                             )
                             if (rowsAffected > 0) {
                                 Log.d("DB_UPDATE", "Data updated successfully.")

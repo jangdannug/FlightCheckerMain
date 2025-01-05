@@ -232,9 +232,9 @@ class MainActivity : AppCompatActivity() {
             val currentDate = LocalDate.now()
 
             // Compare only the date part of the flightDate
-            if (barcode.flightDate.isBefore(currentDate)) {
-                validationUIResponse(false)
-                return false
+           if (barcode.flightDate.isBefore(currentDate)) {
+               validationUIResponse(false)
+               return false
             }
 
             if (barcode.seatNumber.isNullOrEmpty()) {
