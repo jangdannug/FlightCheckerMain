@@ -39,7 +39,7 @@ suspend fun queryApi(context: Context): Boolean {
 
             val jsonResponses = getApiAsync()
 
-         //   db.deleteDatabase(context)
+            //   db.deleteDatabase(context)
             db.deleteFlightCodesData()
             db.deleteFlightData()
             db.deleteDataLogsData()
@@ -75,9 +75,9 @@ suspend fun queryApi(context: Context): Boolean {
                         if (code.contains("*") == true) {
                             // Handle the case where there was an asterisk
                             println("Warning: Flight ID $flightId has an asterisk in the carrier code.")
-                            fixFscode =  code.replace("*","")
+                            fixFscode = code.replace("*", "")
 
-                        }else{
+                        } else {
                             fixFscode = code
                         }
 
@@ -93,12 +93,10 @@ suspend fun queryApi(context: Context): Boolean {
                         departureDt[flightId] ?: ""
                     }
 
+                    var currentLocalDate = LocalDate.now()
+                    var queryDateListMap = List(flightIdMap.size) { currentLocalDate }
 
-
-                    val currentLocalDate = LocalDateTime.now()
-                    val queryDateListMap = List(flightIdMap.size) { currentLocalDate }
-
-                    val batchTypeList = MutableList(flightIdMap.size){""}
+                    val batchTypeList = MutableList(flightIdMap.size) { "" }
                     batch++
                     var batchCount = batch
 
@@ -116,8 +114,10 @@ suspend fun queryApi(context: Context): Boolean {
                         }
                     }
 
-
-
+                    if (batch > 4) {
+                        currentLocalDate = LocalDate.now().plusDays(1)
+                        queryDateListMap = List(flightIdMap.size) { currentLocalDate }
+                    }
 
                     val dbFlights = Flights(
                         flightIds = flightIdMap,
@@ -139,8 +139,8 @@ suspend fun queryApi(context: Context): Boolean {
                         execType = execType
                     )
 
-                 //   val  dbFsCodes = DbFsCodes(
-                   // )
+                    //   val  dbFsCodes = DbFsCodes(
+                    // )
 
                     // Uncomment this line if you want to delete the database
                     // db.deleteDatabase(context)
@@ -163,7 +163,8 @@ suspend fun queryApi(context: Context): Boolean {
 }
 
 suspend fun getApiAsync(): List<String?> {
-    val baseUrl = "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
+    val baseUrl =
+        "https://api.flightstats.com/flex/flightstatus/rest/v2/json/airport/status/SIN/dep/"
 
     // Get current date and the next date
     val currentDate = LocalDate.now()
@@ -185,7 +186,8 @@ suspend fun getApiAsync(): List<String?> {
 
         // Make requests for each hour
         for (reqHours in reqHoursList) {
-            val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}&extendedOptions=useInlinedReferences"
+            val url =
+                "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}&extendedOptions=useInlinedReferences"
 
             val response = withContext(Dispatchers.IO) {
                 try {
@@ -194,7 +196,8 @@ suspend fun getApiAsync(): List<String?> {
                     connection.connect()
 
                     if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
+                        val jsonString =
+                            connection.inputStream.bufferedReader().use { it.readText() }
                         jsonString // Return the raw JSON string
                     } else {
                         println("\tERROR: Response Code ${connection.responseCode}")

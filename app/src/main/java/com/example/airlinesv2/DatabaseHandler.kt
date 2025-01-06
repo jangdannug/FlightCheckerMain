@@ -76,7 +76,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-
     fun insertFlights(flights: Flights) {
         val db = this.writableDatabase
         db.beginTransaction()
@@ -92,7 +91,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 flights.flightIds.size != flights.departureDates.size ||
                 flights.flightIds.size != flights.queryDates.size ||
                 flights.flightIds.size != flights.codeShare.size ||
-                flights.flightIds.size != flights.batchType.size){
+                flights.flightIds.size != flights.batchType.size
+            ) {
                 Log.e("DB_INSERT", "List sizes are inconsistent")
                 return
             }
@@ -106,10 +106,13 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     put(COL_CarrierIata, flights.carrierFsCode[i])
                     put(COL_FlightNumber, flights.flightNumber[i])
                     put(COL_DepartureDate, flights.departureDates[i])
-                    put(COL_QueryDate, flights.queryDates[i].format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                    put(COL_BatchType,flights.batchType[i])
+                    put(
+                        COL_QueryDate,
+                        flights.queryDates[i].format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    )
+                    put(COL_BatchType, flights.batchType[i])
 
-                    val  codeShare = flights.codeShare[i]
+                    val codeShare = flights.codeShare[i]
                     put(COL_CodeShareId, codeShare.first)
                     put(COL_CodeShareData, codeShare.second)
 
@@ -117,13 +120,17 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
                 val result = db.insert(
-                    TABLE_FlightStatuses, null, values)
+                    TABLE_FlightStatuses, null, values
+                )
 
                 if (result != -1L) {
                     successCount++
                 } else {
                     failureCount++
-                    Log.e("DB_INSERT", "Failed to insert data for flightId: ${flights.flightIds[i]} due to conflict or other issue.")
+                    Log.e(
+                        "DB_INSERT",
+                        "Failed to insert data for flightId: ${flights.flightIds[i]} due to conflict or other issue."
+                    )
                 }
             }
 
@@ -194,7 +201,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 if (cursor != null) {
                     if (cursor.count > 0) {
                         cursor.moveToFirst()
-                        val existingIata = cursor.getString(cursor.getColumnIndex(COL_Iata)) // Get existing IATA code
+                        val existingIata =
+                            cursor.getString(cursor.getColumnIndex(COL_Iata)) // Get existing IATA code
                         if (existingIata != fsCodes.iataCode) {
                             // Update the data if it has changed
                             val values = ContentValues().apply {
@@ -249,14 +257,14 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-
     fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight? {
 
 
         try {
             val db = this.readableDatabase
 
-            val ticketDate = barcodeData.flightDate // Assuming ticketDate is in the same format as departureDate
+            val ticketDate =
+                barcodeData.flightDate // Assuming ticketDate is in the same format as departureDate
             // Check if the table exists
             if (!checkIfTableExists(db, TABLE_FlightStatuses)) {
                 Log.e("DB_ERROR", "Table $TABLE_FlightStatuses does not exist in the database")
@@ -267,29 +275,42 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
             val query = """
-    SELECT * 
-    FROM $TABLE_FlightStatuses 
-    WHERE $COL_FlightNumber = ?
-"""
+                            SELECT * 
+                            FROM $TABLE_FlightStatuses 
+                            WHERE $COL_FlightNumber = ?
+                            AND $COL_CarrierIata = ?
+                            AND $COL_QueryDate = ?
+                        """
             var cursor: Cursor? = null
 
             var flightNumber = barcodeData.flightNumber
 
             if (flightNumber.startsWith("000")) {
                 flightNumber = flightNumber.substring(3)
-            }else if (flightNumber.startsWith("00")){
+            } else if (flightNumber.startsWith("00")) {
                 flightNumber = flightNumber.substring(2)
-            }else if (flightNumber.startsWith("0")){
+            } else if (flightNumber.startsWith("0")) {
                 flightNumber = flightNumber.substring(1)
             }
 
             try {
-                cursor = db.rawQuery(query, arrayOf(flightNumber))
+
+                cursor = db.rawQuery(
+                    query,
+                    arrayOf(flightNumber, barcodeData.Iata, barcodeData.flightDate.toString())
+                )
+                var cnt = cursor.count
 
                 //cursor = db.rawQuery(query, arrayOf("279"))
                 //cursor = db.rawQuery(query, arrayOf("681", "IX"))
-
-
+                if (cnt != 1) {
+                    val codeShareData =
+                        "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ?  and codeShareData LIKE  ? AND codeShareData LIKE ?"
+                    val flightNumberWildcard = "'%\"flightNumber\": \"${barcodeData.flightNumber}\"%'"
+                    val iataWildcard = "%${barcodeData.Iata}%"
+                    cursor = db.rawQuery(codeShareData, arrayOf(flightNumberWildcard, iataWildcard))
+                    cnt = cursor.count
+                }
 
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
@@ -299,89 +320,32 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
                 if (cursor.moveToFirst()) {
-                    do {
-                        val flightStat_flightId =
-                            cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
+                    val flightStat_flightId =
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
 
-                        var flightStat_carrierIata =
-                            cursor.getString(cursor.getColumnIndexOrThrow(COL_CarrierIata))
-                        val flightStat_flightNumber =
-                            cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightNumber))
-                        val flightStat_departureDate =
-                            cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
-                        val codeShare_codeShareData =
-                            cursor.getString(cursor.getColumnIndexOrThrow(COL_CodeShareData))
+                    var flightStat_carrierIata =
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_CarrierIata))
+                    val flightStat_flightNumber =
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightNumber))
+                    val flightStat_departureDate =
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+                    val codeShare_codeShareData =
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_CodeShareData))
 
-
-                        //Instantiate params
-
-                        var isContainsIataFlightNumber = false
-
-                        if (codeShare_codeShareData.contains(barcodeData.Iata) &&
-                            codeShare_codeShareData.contains(barcodeData.flightNumber)) {
-                            isContainsIataFlightNumber = true
-                        }
-
-                        val departureDateTime = LocalDateTime.parse(flightStat_departureDate)
-
-                        val id = flightStat_flightId
-                        if (flightStat_carrierIata == barcodeData.Iata  ) {
-                        val test = "success"
-                        }
-
-                        if (isContainsIataFlightNumber)
-                        {
-                            val test = "success"
-                        }
-
-                        if ( departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString()))
-                        {
-                            val  test = "Success"
-                        }
-
-                        // Check if the departure date matches the ticket date
-                        if ( (barcodeData.Iata == flightStat_carrierIata || isContainsIataFlightNumber) &&
-                            departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
-                            // If it matches, set it as preferredFlight
-                            if (departureDateTime.isBefore(currentDateTime) &&
-                                (preferredFlight == null ||
-                                        departureDateTime.isBefore(LocalDateTime.parse(preferredFlight.departureDates)))) {
-                                preferredFlight = DbFlight(
-                                    flightIds = flightStat_flightId,
-                                    carrierIata = flightStat_carrierIata,
-                                    flightNumber = flightNumber,
-                                    departureDates = flightStat_departureDate
-                                )
-                            }
-                            //break // Exit the loop since we found a preferred flight
-                        }
-                        // Track the closest flight regardless of whether it's in the past or future
-                        if (departureDateTime.isBefore(LocalDateTime.parse(closestFlight?.departureDates)) &&
-                            (flightStat_carrierIata == barcodeData.Iata || !isContainsIataFlightNumber)) {
-                            closestFlight = DbFlight(
-                                flightIds = flightStat_flightId,
-                                carrierIata = flightStat_carrierIata,
-                                flightNumber = flightNumber,
-                                departureDates = flightStat_departureDate
-                            )
-                        }
-                    } while (cursor.moveToNext())
+                    return DbFlight(
+                        flightIds = flightStat_flightId,
+                        carrierIata = flightStat_carrierIata,
+                        flightNumber = flightStat_flightNumber,
+                        departureDates = flightStat_departureDate
+                    )
                 }
 
-                val sixHoursAgo = currentDateTime.minusHours(6)
-                val preferredDepartureDateTime = LocalDateTime.parse(preferredFlight?.departureDates)
-                if (preferredDepartureDateTime.isBefore(sixHoursAgo) &&
-                    preferredFlight?.carrierIata == barcodeData.Iata)
-                {
-                    return preferredFlight
-                }else
-                {
-                    return closestFlight
-                }
-                // Return the preferred flight if found, otherwise return the next flight
-                return preferredFlight ?: closestFlight ?: DbFlight("", "", "", "")
             } catch (e: Exception) {
-                Log.e("DB_ERROR", "Error fetching data for flightCode: ${barcodeData.flightIata}", e)
+                Log.e(
+                    "DB_ERROR",
+                    "Error fetching data for flightCode: ${barcodeData.flightIata}",
+                    e
+                )
             } finally {
                 cursor?.close()
             }
@@ -393,7 +357,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-
     fun getLatestUpdate(): String? {
         val db = this.readableDatabase
         var latestExecuteDt: String? = null
@@ -402,8 +365,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         val dataLogsCount = countDataLogs()
         val flightCount = countFlights()
 
-        if (dataLogsCount > 0 || flightCount > 0)
-        {
+        if (dataLogsCount > 0 || flightCount > 0) {
             try {
 
                 // Query to get the latest executeDt
@@ -436,7 +398,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-
     fun countDataLogs(): Int {
         val db = this.readableDatabase
         val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_dataLogs", null)
@@ -445,7 +406,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         cursor.close()
         return count
     }
-
 
 
     fun countFlights(): Int {
@@ -460,8 +420,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-    fun  deleteFlightData()
-    {
+    fun deleteFlightData() {
         val db = this.writableDatabase
 
         try {
@@ -478,8 +437,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
     }
 
-    fun  deleteDataLogsData()
-    {
+    fun deleteDataLogsData() {
         val db = this.writableDatabase
 
         try {
@@ -496,8 +454,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
     }
 
-    fun  deleteFlightCodesData()
-    {
+    fun deleteFlightCodesData() {
         val db = this.writableDatabase
 
         try {

@@ -1,5 +1,6 @@
 package com.example.airlinesv2
 
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 class Flights {
@@ -7,7 +8,7 @@ class Flights {
     var carrierFsCode: List<String>  // List of strings for flightCodes
     var flightNumber: List<String>  // List of strings for departureAirportFsCodes
     var departureDates: List<String>  // List of strings for departureDates
-    var queryDates: List<LocalDateTime>
+    var queryDates: List<LocalDate>
     var codeShare: List<Pair<Long, String>>
     var batchType: List<String>
 
@@ -16,7 +17,7 @@ class Flights {
         carrierFsCode: List<String>,
         flightNumber: List<String>,
         departureDates: List<Any>,
-        queryDate: List<LocalDateTime>,
+        queryDate: List<LocalDate>,
         codeShare: List<Pair<Long, String>>,
         batchType: List<String>
 
