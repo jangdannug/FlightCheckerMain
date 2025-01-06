@@ -16,7 +16,7 @@ fun validateFlight(context: Context, barcode: BarcodeData): Boolean {
         val currentDate = LocalDateTime.now()
 
         val formatterDb = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-        val departureDt = LocalDateTime.parse(dbResult.departureDates, formatterDb)
+        val departureDt = LocalDateTime.parse(dbResult?.departureDates, formatterDb)
 
         val ticketDate = barcode.flightDate
 

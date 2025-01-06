@@ -250,7 +250,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
 
 
-    fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight {
+    fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight? {
 
 
         try {
@@ -324,12 +324,26 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
                         val departureDateTime = LocalDateTime.parse(flightStat_departureDate)
 
+                        val id = flightStat_flightId
+                        if (flightStat_carrierIata == barcodeData.Iata  ) {
+                        val test = "success"
+                        }
+
+                        if (isContainsIataFlightNumber)
+                        {
+                            val test = "success"
+                        }
+
+                        if ( departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString()))
+                        {
+                            val  test = "Success"
+                        }
 
                         // Check if the departure date matches the ticket date
-                        if ( barcodeData.Iata == flightStat_carrierIata || isContainsIataFlightNumber &&
+                        if ( (barcodeData.Iata == flightStat_carrierIata || isContainsIataFlightNumber) &&
                             departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
                             // If it matches, set it as preferredFlight
-                            if (departureDateTime.isAfter(currentDateTime) &&
+                            if (departureDateTime.isBefore(currentDateTime) &&
                                 (preferredFlight == null ||
                                         departureDateTime.isBefore(LocalDateTime.parse(preferredFlight.departureDates)))) {
                                 preferredFlight = DbFlight(
@@ -342,8 +356,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                             //break // Exit the loop since we found a preferred flight
                         }
                         // Track the closest flight regardless of whether it's in the past or future
-                        if (closestFlight == null ||
-                            departureDateTime.isBefore(LocalDateTime.parse(closestFlight.departureDates))) {
+                        if (departureDateTime.isBefore(LocalDateTime.parse(closestFlight?.departureDates)) &&
+                            (flightStat_carrierIata == barcodeData.Iata || !isContainsIataFlightNumber)) {
                             closestFlight = DbFlight(
                                 flightIds = flightStat_flightId,
                                 carrierIata = flightStat_carrierIata,
@@ -352,6 +366,17 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                             )
                         }
                     } while (cursor.moveToNext())
+                }
+
+                val sixHoursAgo = currentDateTime.minusHours(6)
+                val preferredDepartureDateTime = LocalDateTime.parse(preferredFlight?.departureDates)
+                if (preferredDepartureDateTime.isBefore(sixHoursAgo) &&
+                    preferredFlight?.carrierIata == barcodeData.Iata)
+                {
+                    return preferredFlight
+                }else
+                {
+                    return closestFlight
                 }
                 // Return the preferred flight if found, otherwise return the next flight
                 return preferredFlight ?: closestFlight ?: DbFlight("", "", "", "")
