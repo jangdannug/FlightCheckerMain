@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var barcodeScanner: BarcodeScanner
     public var scanningPaused = false
 
-    private lateinit var test1: TextView
+    private lateinit var noSeatNumber: TextView
     private lateinit var test2: TextView
     private lateinit var test3: TextView
 
@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity() {
 
             clearDetails()
 
-            test1 = findViewById(R.id.test1)
+            noSeatNumber = findViewById(R.id.noSeatNumber)
             test2 = findViewById(R.id.test2)
             test3 = findViewById(R.id.test3)
 
@@ -184,10 +184,10 @@ class MainActivity : AppCompatActivity() {
                                             val db = DataBaseHandler(context)
                                             var code = extractedData.flightIata
                                            val dataTest = db.getDataByFlightCode(extractedData)
-                                           test1.text = "flightID: ${dataTest.flightIds}\n " +
-                                                   "CarrierFsCode: ${dataTest.carrierFsCode}\n" +
+                                           test2.text = "flightID: ${dataTest.flightIds}\n " +
+                                                   "CarrierFsCode: ${dataTest.carrierIata}\n" +
                                                    "FlightNumber: ${dataTest.flightNumber}"
-                                            test2.text = "flightDate: ${dataTest.departureDates}"
+                                            test3.text = "flightDate: ${dataTest.departureDates}"
                                             delay(3000)
                                             scanningPaused = false
                                             clearDetails()
@@ -232,15 +232,16 @@ class MainActivity : AppCompatActivity() {
             val currentDate = LocalDate.now()
 
             // Compare only the date part of the flightDate
-           if (barcode.flightDate.isBefore(currentDate)) {
-               validationUIResponse(false)
-               return false
-            }
+         if (barcode.flightDate.isBefore(currentDate)) {
+              validationUIResponse(false)
+             return false
+           }
 
             if (barcode.seatNumber.isNullOrEmpty()) {
+                noSeatNumber.text = "NO SEAT NUMBER"
                 validationUIResponse(false)
                 return false
-            }
+           }
 
             if (barcode.seatNumber == "000") {
                 validationUIResponse(false)
@@ -286,6 +287,8 @@ class MainActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.WHITE)
         val validationMsg = findViewById<TextView>(R.id.validationMsg)
         validationMsg.text = ""
+        val noSeatNumber = findViewById<TextView>(R.id.noSeatNumber)
+        noSeatNumber.text = ""
     }
 
     private fun extractBarcodeData(encodedBarcode: String): BarcodeData? {
@@ -309,7 +312,7 @@ class MainActivity : AppCompatActivity() {
             // Return a BarcodeData instance
             return BarcodeData(
                 passengerName = passengerName,
-                airlineCode = airlineCode,
+                Iata = airlineCode,
                 flightNumber = flightNumber,
                 flightDate = flightDate,
                 seatNumber = seatNumber,
@@ -389,7 +392,7 @@ class MainActivity : AppCompatActivity() {
 
 data class BarcodeData(
     val passengerName: String,
-    val airlineCode: String,
+    val Iata: String,
     val flightNumber: String,
     val flightDate: LocalDate,
     val seatNumber: String,

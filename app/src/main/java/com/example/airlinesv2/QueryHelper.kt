@@ -13,10 +13,10 @@ fun getFlightId(flightStatuses: JsonArray?): List<String> {
     } ?: emptyList()
 }
 
-fun getFsCode(flightStatuses: JsonArray?): Map<String?, String?> {
+fun getIata(flightStatuses: JsonArray?): Map<String?, String?> {
     return flightStatuses?.associate { flight ->
         val flightId = flight.jsonObject["flightId"]?.jsonPrimitive?.content
-        val carrierFsCode = flight.jsonObject["carrierFsCode"]?.jsonPrimitive?.content
+        val carrierFsCode = flight.jsonObject["carrier"]?.jsonObject?.get("iata")?.jsonPrimitive?.content
         flightId to carrierFsCode
     } ?: emptyMap()
 }

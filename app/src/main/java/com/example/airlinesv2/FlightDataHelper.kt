@@ -1,6 +1,5 @@
 package com.example.airlinesv2
 
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 class Flights {
@@ -9,10 +8,17 @@ class Flights {
     var flightNumber: List<String>  // List of strings for departureAirportFsCodes
     var departureDates: List<String>  // List of strings for departureDates
     var queryDates: List<LocalDateTime>
+    var codeShare: List<Pair<Long, String>>
+    var batchType: List<String>
 
     constructor(
-        flightIds: List<Int>, carrierFsCode: List<String>,
-        flightNumber: List<String>, departureDates: List<Any>, queryDate: List<LocalDateTime>
+        flightIds: List<Int>,
+        carrierFsCode: List<String>,
+        flightNumber: List<String>,
+        departureDates: List<Any>,
+        queryDate: List<LocalDateTime>,
+        codeShare: List<Pair<Long, String>>,
+        batchType: List<String>
 
     ) {
         this.flightIds = flightIds
@@ -20,22 +26,24 @@ class Flights {
         this.flightNumber = flightNumber
         this.departureDates = departureDates as List<String>
         this.queryDates = queryDate
+        this.codeShare = codeShare
+        this.batchType = batchType
     }
 }
 
 
 class DbFlight{
     var flightIds: String
-    var carrierFsCode: String
+    var carrierIata: String
     var flightNumber: String
     var departureDates: String
 
     constructor(
-        flightIds: String, carrierFsCode: String,
+        flightIds: String, carrierIata: String,
         flightNumber: String, departureDates: String
     ) {
         this.flightIds = flightIds
-        this.carrierFsCode = carrierFsCode
+        this.carrierIata = carrierIata
         this.flightNumber = flightNumber
         this.departureDates = departureDates
     }
@@ -64,6 +72,21 @@ class DbFsCodes{
     ){
         this.fsCode = fsCode
         this.iataCode = iataCode
+    }
+}
+
+
+class DbCodeShare{
+    var fsCode: String
+    var flightNumber: String
+    var relationship : String
+
+    constructor(
+        fsCode: String, flightNumber: String, relationship : String
+    ){
+        this.fsCode = fsCode
+        this.flightNumber = flightNumber
+        this.relationship = relationship
     }
 }
 

@@ -1,5 +1,6 @@
 package com.example.airlinesv2
 
+import getCodeshares
 import android.content.Context
 import android.os.Handler
 import android.util.Log
@@ -43,7 +44,10 @@ suspend fun queryApi(context: Context): Boolean {
             db.deleteFlightData()
             db.deleteDataLogsData()
 
+            var batch = 0
+
             jsonResponses.forEach { jsonResponse ->
+
                 val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
                 val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
                 val dbFsCodesList = getAppendix(jsonObject)
@@ -54,15 +58,17 @@ suspend fun queryApi(context: Context): Boolean {
 
                 if (!flightStatuses.isNullOrEmpty()) {
                     val flightId = getFlightId(flightStatuses)
-                    val carrierFsCode = getFsCode(flightStatuses)
+                    val carrierIata = getIata(flightStatuses)
                     val flightNumber = getFlightNumber(flightStatuses)
                     val departureDt = getLatestDepartureDt(flightStatuses)
+                    val codeShareMap = getCodeshares(flightStatuses)
+
 
                     // Mapping
                     val flightIdMap = flightId.mapNotNull { it.toIntOrNull() }
 
                     val carrierFsCodeMap = flightId.map { flightId ->
-                        val carrierFsCode = (carrierFsCode[flightId] ?: "")
+                        val carrierFsCode = (carrierIata[flightId] ?: "")
 
                         var code = carrierFsCode
                         var fixFscode = ""
@@ -87,8 +93,30 @@ suspend fun queryApi(context: Context): Boolean {
                         departureDt[flightId] ?: ""
                     }
 
+
+
                     val currentLocalDate = LocalDateTime.now()
                     val queryDateListMap = List(flightIdMap.size) { currentLocalDate }
+
+                    val batchTypeList = MutableList(flightIdMap.size){""}
+                    batch++
+                    var batchCount = batch
+
+                    for (i in flightIdMap.indices) {
+                        batchTypeList[i] = when (batchCount) {
+                            1 -> "CurrentDateHour0"
+                            2 -> "CurrentDateHour6"
+                            3 -> "CurrentDateHour12"
+                            4 -> "CurrentDateHour18"
+                            5 -> "NextDateHour0"
+                            6 -> "NextDateHour6"
+                            7 -> "NextDateHour12"
+                            8 -> "NextDateHour18"
+                            else -> ""
+                        }
+                    }
+
+
 
 
                     val dbFlights = Flights(
@@ -96,7 +124,9 @@ suspend fun queryApi(context: Context): Boolean {
                         carrierFsCode = carrierFsCodeMap,
                         flightNumber = flightNumberMap,
                         departureDates = departureDtMap,
-                        queryDate = queryDateListMap
+                        queryDate = queryDateListMap,
+                        codeShare = codeShareMap,
+                        batchType = batchTypeList
                     )
 
                     val currentDate = LocalDateTime.now().toString()
@@ -155,7 +185,7 @@ suspend fun getApiAsync(): List<String?> {
 
         // Make requests for each hour
         for (reqHours in reqHoursList) {
-            val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}"
+            val url = "${baseUrl}${currDate}${reqHours}?appId=${appId}&appKey=${appKey}&utc=false&numHours=${numberHours}&extendedOptions=useInlinedReferences"
 
             val response = withContext(Dispatchers.IO) {
                 try {
@@ -219,7 +249,7 @@ fun isTimeWithinLast60Minutes(dbUpdateDt: LocalDateTime): Boolean {
         val handler = Handler()
         var isVisible = true
         val blinkInterval = 400L // Blink every 500 milliseconds
-        val totalDuration = 20000L // Total duration of 30 seconds
+        val totalDuration = 15000L // Total duration of 15 seconds
 
         // Runnable to handle the blinking effect
         val blinkRunnable = object : Runnable {

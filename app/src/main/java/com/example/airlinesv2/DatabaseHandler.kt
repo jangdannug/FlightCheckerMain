@@ -11,22 +11,25 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-const val DATABASE_NAME = "Flights"
+const val DATABASE_NAME = "FLIGHTS"
 const val TABLE_FlightStatuses = "FlightStatuses"
 const val COL_FlightId = "flightIds"
-const val COL_CarrierFsCode = "CarrierFsCode"
-const val COL_FlightNumber = "FlightCode"
-const val COL_DepartureDate = "DepartureDate"
-const val  COL_QueryDate = "QueryDate"
+const val COL_CarrierIata = "carrierIata"
+const val COL_FlightNumber = "flightNumber"
+const val COL_DepartureDate = "departureDate"
+const val  COL_QueryDate = "queryDate"
+const val  COL_CodeShareData = "codeShareData"
+const val  COL_CodeShareId = "codeShareId"
+const val  COL_BatchType = "batchType"
 
-const val  TABLE_dataLogs = "dataLogs"
+const val  TABLE_dataLogs = "DataLogs"
 const val COL_executeDt = "executeDt"
 const val COL_dataSize = "dataSize"
 const val COL_execType = "execType"
 
 const val TABLE_Codes = "FlightCodes"
-const val COL_FsCode = "FsCode"
-const val COL_Iata = "Iata"
+const val COL_FsCode = "fsCode"
+const val COL_Iata = "iata"
 
 class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,null,1) {
 
@@ -40,10 +43,13 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
         val createTable = " CREATE TABLE $TABLE_FlightStatuses (" +
                 "$COL_FlightId INTEGER PRIMARY KEY," +
-                "$COL_CarrierFsCode TEXT," +
+                "$COL_CarrierIata TEXT," +
                 "$COL_FlightNumber TEXT," +
                 "$COL_DepartureDate TEXT," +
-                "$COL_QueryDate TEXT)"
+                "$COL_BatchType TEXT," +
+                "$COL_QueryDate TEXT," +
+                "$COL_CodeShareId TEXT," +
+                "$COL_CodeShareData TEXT)"
         db?.execSQL(createTable)
 
         // Create DataLogs table
@@ -77,12 +83,16 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
         val dateUpdate = LocalDateTime.now()
 
+        val test = flights.codeShare
+
         try {
             // Validate list sizes
             if (flights.flightIds.size != flights.carrierFsCode.size ||
                 flights.flightIds.size != flights.flightNumber.size ||
                 flights.flightIds.size != flights.departureDates.size ||
-                flights.flightIds.size != flights.queryDates.size) {
+                flights.flightIds.size != flights.queryDates.size ||
+                flights.flightIds.size != flights.codeShare.size ||
+                flights.flightIds.size != flights.batchType.size){
                 Log.e("DB_INSERT", "List sizes are inconsistent")
                 return
             }
@@ -93,10 +103,16 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             for (i in flights.flightIds.indices) {
                 val values = ContentValues().apply {
                     put(COL_FlightId, flights.flightIds[i])
-                    put(COL_CarrierFsCode, flights.carrierFsCode[i])
+                    put(COL_CarrierIata, flights.carrierFsCode[i])
                     put(COL_FlightNumber, flights.flightNumber[i])
                     put(COL_DepartureDate, flights.departureDates[i])
                     put(COL_QueryDate, flights.queryDates[i].format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                    put(COL_BatchType,flights.batchType[i])
+
+                    val  codeShare = flights.codeShare[i]
+                    put(COL_CodeShareId, codeShare.first)
+                    put(COL_CodeShareData, codeShare.second)
+
                 }
 
 
@@ -252,9 +268,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
             val query = """
     SELECT * 
-    FROM $TABLE_FlightStatuses AS fs
-    JOIN $TABLE_Codes AS fc ON fs.$COL_CarrierFsCode = fc.$COL_FsCode
-    WHERE fs.$COL_FlightNumber = ? and fc.$COL_Iata = ?
+    FROM $TABLE_FlightStatuses 
+    WHERE $COL_FlightNumber = ?
 """
             var cursor: Cursor? = null
 
@@ -269,9 +284,9 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             }
 
             try {
-                cursor = db.rawQuery(query, arrayOf(flightNumber, barcodeData.airlineCode))
+                cursor = db.rawQuery(query, arrayOf(flightNumber))
 
-                //cursor = db.rawQuery(query, arrayOf("279", "SQ"))
+                //cursor = db.rawQuery(query, arrayOf("279"))
                 //cursor = db.rawQuery(query, arrayOf("681", "IX"))
 
 
@@ -280,29 +295,48 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 var preferredFlight: DbFlight? = null
                 var closestFlight: DbFlight? = null
 
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+
 
                 if (cursor.moveToFirst()) {
                     do {
-                        val flightId = cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
-                        val carrierFsCode = cursor.getString(cursor.getColumnIndexOrThrow(COL_Iata))
-                        val flightNumber = cursor.getString(cursor.getColumnIndexOrThrow(
-                            COL_FlightNumber))
-                        val departureDate = cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+                        val flightStat_flightId =
+                            cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightId))
 
-                        // Parse the departure date to LocalDateTime for comparison
-                        val departureDateTime = LocalDateTime.parse(departureDate)
+                        var flightStat_carrierIata =
+                            cursor.getString(cursor.getColumnIndexOrThrow(COL_CarrierIata))
+                        val flightStat_flightNumber =
+                            cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightNumber))
+                        val flightStat_departureDate =
+                            cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+                        val codeShare_codeShareData =
+                            cursor.getString(cursor.getColumnIndexOrThrow(COL_CodeShareData))
+
+
+                        //Instantiate params
+
+                        var isContainsIataFlightNumber = false
+
+                        if (codeShare_codeShareData.contains(barcodeData.Iata) &&
+                            codeShare_codeShareData.contains(barcodeData.flightNumber)) {
+                            isContainsIataFlightNumber = true
+                        }
+
+                        val departureDateTime = LocalDateTime.parse(flightStat_departureDate)
+
 
                         // Check if the departure date matches the ticket date
-                        if (departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
+                        if ( barcodeData.Iata == flightStat_carrierIata || isContainsIataFlightNumber &&
+                            departureDateTime.toLocalDate() == LocalDate.parse(ticketDate.toString())) {
                             // If it matches, set it as preferredFlight
                             if (departureDateTime.isAfter(currentDateTime) &&
                                 (preferredFlight == null ||
                                         departureDateTime.isBefore(LocalDateTime.parse(preferredFlight.departureDates)))) {
                                 preferredFlight = DbFlight(
-                                    flightIds = flightId,
-                                    carrierFsCode = carrierFsCode,
+                                    flightIds = flightStat_flightId,
+                                    carrierIata = flightStat_carrierIata,
                                     flightNumber = flightNumber,
-                                    departureDates = departureDate
+                                    departureDates = flightStat_departureDate
                                 )
                             }
                             //break // Exit the loop since we found a preferred flight
@@ -311,15 +345,14 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                         if (closestFlight == null ||
                             departureDateTime.isBefore(LocalDateTime.parse(closestFlight.departureDates))) {
                             closestFlight = DbFlight(
-                                flightIds = flightId,
-                                carrierFsCode = carrierFsCode,
+                                flightIds = flightStat_flightId,
+                                carrierIata = flightStat_carrierIata,
                                 flightNumber = flightNumber,
-                                departureDates = departureDate
+                                departureDates = flightStat_departureDate
                             )
                         }
                     } while (cursor.moveToNext())
                 }
-
                 // Return the preferred flight if found, otherwise return the next flight
                 return preferredFlight ?: closestFlight ?: DbFlight("", "", "", "")
             } catch (e: Exception) {
