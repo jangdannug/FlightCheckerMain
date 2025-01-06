@@ -259,7 +259,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
     fun getDataByFlightCode(barcodeData: BarcodeData): DbFlight? {
 
-
         try {
             val db = this.readableDatabase
 
@@ -308,7 +307,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                         "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ?  and codeShareData LIKE  ? AND codeShareData LIKE ?"
                     val flightNumberWildcard = "'%\"flightNumber\": \"${barcodeData.flightNumber}\"%'"
                     val iataWildcard = "%${barcodeData.Iata}%"
-                    cursor = db.rawQuery(codeShareData, arrayOf(flightNumberWildcard, iataWildcard))
+                    cursor = db.rawQuery(codeShareData, arrayOf(flightNumber, barcodeData.flightDate.toString(),flightNumberWildcard,iataWildcard))
                     cnt = cursor.count
                 }
 
