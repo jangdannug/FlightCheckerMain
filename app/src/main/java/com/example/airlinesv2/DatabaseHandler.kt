@@ -320,8 +320,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 if (cnt != 1) {
                     val codeShareData =
                         "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ? and departureDate = ? and codeShareData LIKE  ? AND codeShareData LIKE ?"
-                    val flightNumberWildcard = "'%\"flightNumber\": \"${flightNumber}\"%'"
-                    val iataWildcard = "'%${barcodeData.Iata}%'"
+                    val flightNumberWildcard = "%\"flightNumber\": \"$flightNumber\"%"
+                    val iataWildcard = "%${barcodeData.Iata}%"
                     cursor = db.rawQuery(codeShareData, arrayOf(flightNumber,barcodeData.flightDate.toString(), barcodeData.flightDate.toString(),flightNumberWildcard,iataWildcard))
                     cnt = cursor.count
                 }
