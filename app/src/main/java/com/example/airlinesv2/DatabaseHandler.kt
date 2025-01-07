@@ -7,7 +7,6 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -16,6 +15,7 @@ const val TABLE_FlightStatuses = "FlightStatuses"
 const val COL_FlightId = "flightIds"
 const val COL_CarrierIata = "carrierIata"
 const val COL_FlightNumber = "flightNumber"
+const val COL_DepartureDateTime = "departureDateTime"
 const val COL_DepartureDate = "departureDate"
 const val  COL_QueryDate = "queryDate"
 const val  COL_CodeShareData = "codeShareData"
@@ -45,6 +45,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 "$COL_FlightId INTEGER PRIMARY KEY," +
                 "$COL_CarrierIata TEXT," +
                 "$COL_FlightNumber TEXT," +
+                "$COL_DepartureDateTime TEXT," +
                 "$COL_DepartureDate TEXT," +
                 "$COL_BatchType TEXT," +
                 "$COL_QueryDate TEXT," +
@@ -100,12 +101,25 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             var successCount = 0
             var failureCount = 0
 
+            val inputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+            val outputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+            var formattedDepartureDate = mutableListOf<String>()
+            for (dateTimeString in flights.departureDates) {
+                val localDateTime = LocalDateTime.parse(dateTimeString, inputFormatter)
+                val formattedDateString = localDateTime.format(outputFormatter)
+                formattedDepartureDate.add(formattedDateString)
+            }
+
+
             for (i in flights.flightIds.indices) {
+
                 val values = ContentValues().apply {
                     put(COL_FlightId, flights.flightIds[i])
                     put(COL_CarrierIata, flights.carrierFsCode[i])
                     put(COL_FlightNumber, flights.flightNumber[i])
-                    put(COL_DepartureDate, flights.departureDates[i])
+                    put(COL_DepartureDateTime, flights.departureDates[i])
+                    put(COL_DepartureDate,formattedDepartureDate[i])
                     put(
                         COL_QueryDate,
                         flights.queryDates[i].format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -279,6 +293,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                             WHERE $COL_FlightNumber = ?
                             AND $COL_CarrierIata = ?
                             AND $COL_QueryDate = ?
+                            AND $COL_DepartureDate = ?
                         """
             var cursor: Cursor? = null
 
@@ -296,7 +311,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
                 cursor = db.rawQuery(
                     query,
-                    arrayOf(flightNumber, barcodeData.Iata, barcodeData.flightDate.toString())
+                    arrayOf(flightNumber, barcodeData.Iata, barcodeData.flightDate.toString(), barcodeData.flightDate.toString())
                 )
                 var cnt = cursor.count
 
@@ -304,10 +319,10 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 //cursor = db.rawQuery(query, arrayOf("681", "IX"))
                 if (cnt != 1) {
                     val codeShareData =
-                        "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ?  and codeShareData LIKE  ? AND codeShareData LIKE ?"
-                    val flightNumberWildcard = "'%\"flightNumber\": \"${barcodeData.flightNumber}\"%'"
-                    val iataWildcard = "%${barcodeData.Iata}%"
-                    cursor = db.rawQuery(codeShareData, arrayOf(flightNumber, barcodeData.flightDate.toString(),flightNumberWildcard,iataWildcard))
+                        "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ? and departureDate = ? and codeShareData LIKE  ? AND codeShareData LIKE ?"
+                    val flightNumberWildcard = "'%\"flightNumber\": \"${flightNumber}\"%'"
+                    val iataWildcard = "'%${barcodeData.Iata}%'"
+                    cursor = db.rawQuery(codeShareData, arrayOf(flightNumber,barcodeData.flightDate.toString(), barcodeData.flightDate.toString(),flightNumberWildcard,iataWildcard))
                     cnt = cursor.count
                 }
 
@@ -327,7 +342,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     val flightStat_flightNumber =
                         cursor.getString(cursor.getColumnIndexOrThrow(COL_FlightNumber))
                     val flightStat_departureDate =
-                        cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDate))
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_DepartureDateTime))
                     val codeShare_codeShareData =
                         cursor.getString(cursor.getColumnIndexOrThrow(COL_CodeShareData))
 
