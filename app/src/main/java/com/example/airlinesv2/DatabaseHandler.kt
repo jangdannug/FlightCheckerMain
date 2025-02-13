@@ -45,7 +45,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 "$COL_FlightId INTEGER PRIMARY KEY," +
                 "$COL_CarrierIata TEXT," +
                 "$COL_FlightNumber TEXT," +
-                "$COL_DepartureDateTime TEXT," +
+                "$COL_DepartureDateTime DATETIME," +
                 "$COL_DepartureDate TEXT," +
                 "$COL_BatchType TEXT," +
                 "$COL_QueryDate TEXT," +
@@ -118,7 +118,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     put(COL_FlightId, flights.flightIds[i])
                     put(COL_CarrierIata, flights.carrierFsCode[i])
                     put(COL_FlightNumber, flights.flightNumber[i])
-                    put(COL_DepartureDateTime, flights.departureDates[i])
+                    put(COL_DepartureDateTime, flights.departureDates[i].format(DateTimeFormatter.ISO_DATE_TIME))
                     put(COL_DepartureDate,formattedDepartureDate[i])
                     put(
                         COL_QueryDate,
@@ -166,21 +166,19 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
 
         try {
             // Delete all existing records
-            db.execSQL("DELETE FROM $TABLE_dataLogs")
-
-            // ContentValues for inserting new data
-            val values = ContentValues().apply {
-                put(COL_executeDt, dbLogs.executeDt) // No need for "$" here
-                put(COL_dataSize, dbLogs.dataSize) // Ensure this is the correct type
-                put(COL_execType, dbLogs.execType)
-            }
-
-            // Insert new data
-            val newRowId = db.insert(TABLE_dataLogs, null, values)
-            if (newRowId != -1L) {
-                Log.d("DB_INSERT", "Data inserted successfully with row ID: $newRowId")
-            } else {
-                Log.e("DB_INSERT", "Failed to insert new data.")
+            for ( i in dbLogs.execType.indices) {
+                // ContentValues for inserting new data
+                val values = ContentValues().apply {
+                    put(COL_executeDt, dbLogs.executeDt[i]) // No need for "$" here
+                    put(COL_dataSize, dbLogs.dataSize[i]) // Ensure this is the correct type
+                    put(COL_execType, dbLogs.execType[i])
+                }
+                val newRowId = db.insert(TABLE_dataLogs, null, values)
+                if (newRowId != -1L) {
+                    Log.d("DB_INSERT", "Data inserted successfully with row ID: $newRowId")
+                } else {
+                    Log.e("DB_INSERT", "Failed to insert new data.")
+                }
             }
 
             db.setTransactionSuccessful()
@@ -286,6 +284,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             barcodeData.flightIata
             barcodeData.flightNumber
 
+            val checkDateTime = LocalDateTime.now()
 
             val query = """
                             SELECT * 
@@ -294,6 +293,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                             AND $COL_CarrierIata = ?
                             AND $COL_QueryDate = ?
                             AND $COL_DepartureDate = ?
+                            AND $COL_DepartureDateTime >= DATETIME('now', '-3 hours')
+                            ORDER BY departureDateTime DESC LIMIT 1
                         """
             var cursor: Cursor? = null
 
@@ -315,8 +316,6 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 )
                 var cnt = cursor.count
 
-                //cursor = db.rawQuery(query, arrayOf("279"))
-                //cursor = db.rawQuery(query, arrayOf("681", "IX"))
                 if (cnt != 1) {
                     val codeShareData =
                         "SELECT * FROM FlightStatuses WHERE  FlightNumber = ?  and queryDate = ? and departureDate = ? and codeShareData LIKE  ? AND codeShareData LIKE ?"
@@ -325,6 +324,20 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     cursor = db.rawQuery(codeShareData, arrayOf(flightNumber,barcodeData.flightDate.toString(), barcodeData.flightDate.toString(),flightNumberWildcard,iataWildcard))
                     cnt = cursor.count
                 }
+
+               if (cnt != 1){
+                  val delayedFlightQuery =
+                       "SELECT * FROM flightstatuses where flightNumber = ? and  carrierIata = ? and queryDate = ? order by departureDateTime desc limit 1"
+                   cursor = db.rawQuery(delayedFlightQuery, arrayOf(flightNumber,barcodeData.Iata,barcodeData.flightDate.toString()))
+                }
+                cnt = cursor.count
+
+                if (cnt != 1){
+                    val nearestFlight =
+                        "SELECT * FROM flightstatuses where flightNumber = ? and  carrierIata = ? order by departureDateTime desc limit 1"
+                    cursor = db.rawQuery(nearestFlight, arrayOf(flightNumber,barcodeData.Iata))
+                }
+                cnt = cursor.count
 
                 val currentDateTime = LocalDateTime.now() // Get current date and time
                 var preferredFlight: DbFlight? = null
@@ -371,9 +384,8 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     }
 
 
-    fun getLatestUpdate(): String? {
+    fun getLatestUpdate(): DbDataLogsReturn {
         val db = this.readableDatabase
-        var latestExecuteDt: String? = null
 
         //Verify if there are rows
         val dataLogsCount = countDataLogs()
@@ -383,7 +395,7 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             try {
 
                 // Query to get the latest executeDt
-                val query = "SELECT * FROM $TABLE_dataLogs ORDER BY $COL_executeDt DESC LIMIT 1"
+                val query = "SELECT * FROM $TABLE_dataLogs ORDER BY $COL_execType DESC LIMIT 1"
 
                 val cursor = db.rawQuery(query, null)
 
@@ -391,24 +403,35 @@ class DataBaseHandler(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 val rowCount = cursor.count
                 println("Number of rows returned: $rowCount")
 
+                var latestExecuteDt = ""
+                var dataSize = ""
+                var execType = ""
 
                 if (cursor.moveToFirst()) {
                     val columnIndex = cursor.getColumnIndex(COL_executeDt)
                     if (columnIndex != -1) {
-                        latestExecuteDt = cursor.getString(columnIndex)
+                        latestExecuteDt = cursor.getString(cursor.getColumnIndexOrThrow(
+                           COL_executeDt))
+                         dataSize = cursor.getString(cursor.getColumnIndexOrThrow(COL_dataSize))
+                         execType = cursor.getString(cursor.getColumnIndexOrThrow(COL_execType))
                     } else {
                         println("Column $COL_executeDt not found in cursor.")
                     }
                 }
+                val dbData =  DbDataLogsReturn(
+                    executeDt = latestExecuteDt,
+                    dataSize = dataSize,
+                    execType = execType
+                )
 
                 cursor.close()
                 db.close()
-                return latestExecuteDt
+                return dbData
             } catch (e: Exception) {
-                return null
+                return DbDataLogsReturn("","","")
             }
         }
-        return null
+        return DbDataLogsReturn("","","")
     }
 
 

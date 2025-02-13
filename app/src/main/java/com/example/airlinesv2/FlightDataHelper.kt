@@ -51,12 +51,26 @@ class DbFlight{
 }
 
 class DbDataLogs{
-    var executeDt : String
-    var dataSize : String
-    var execType : String
+    var executeDt : List<String>
+    var dataSize :  List<String>
+    var execType :  List<String>
 
     constructor(
-        executeDt: String, dataSize: String, execType: String
+        executeDt:  List<String>, dataSize:  List<String>, execType:  List<String>
+    ){
+        this.executeDt = executeDt
+        this.dataSize = dataSize
+        this.execType = execType
+    }
+}
+
+class DbDataLogsReturn{
+    var executeDt : String
+    var dataSize :  String
+    var execType :  String
+
+    constructor(
+        executeDt: String, dataSize:  String, execType:  String
     ){
         this.executeDt = executeDt
         this.dataSize = dataSize

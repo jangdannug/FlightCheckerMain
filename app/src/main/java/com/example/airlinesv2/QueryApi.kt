@@ -28,132 +28,137 @@ suspend fun queryApi(context: Context): Boolean {
     return try {
         var isUpdated = false
         val checkUpdate = db.getLatestUpdate()
+        val checkExecType = checkUpdate.execType
 
-        if (!checkUpdate.isNullOrEmpty()) {
-            val dbUpdateDt = LocalDateTime.parse(checkUpdate)
-            isUpdated = isTimeWithinLast60Minutes(dbUpdateDt)
+        if (checkUpdate.executeDt.isNotEmpty()) {
+            val dbUpdateDt = LocalDateTime.parse(checkUpdate.executeDt)
+            isUpdated = isDbUpdated(dbUpdateDt,checkExecType)
         }
 
         if (!isUpdated) {
+
             showCustomToast(context, "UPDATING PLEASE WAIT")
 
-            val jsonResponses = getApiAsync()
+                val jsonResponses = getApiAsync()
 
-            //   db.deleteDatabase(context)
-            db.deleteFlightCodesData()
-            db.deleteFlightData()
-            db.deleteDataLogsData()
+                db.deleteDatabase(context)
+                db.deleteFlightCodesData()
+                db.deleteFlightData()
+                db.deleteDataLogsData()
 
-            var batch = 0
-
-            jsonResponses.forEach { jsonResponse ->
-
-                val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
-                val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
-                val dbFsCodesList = getAppendix(jsonObject)
-
-                db.insertCodes(dbFsCodesList)
-                var test = dbFsCodesList
+                var batch = 0
+                var execType = 0
 
 
-                if (!flightStatuses.isNullOrEmpty()) {
-                    val flightId = getFlightId(flightStatuses)
-                    val carrierIata = getIata(flightStatuses)
-                    val flightNumber = getFlightNumber(flightStatuses)
-                    val departureDt = getLatestDepartureDt(flightStatuses)
-                    val codeShareMap = getCodeshares(flightStatuses)
+                jsonResponses.forEach { jsonResponse ->
+
+                    val jsonObject = jsonResponse?.let { Json.parseToJsonElement(it).jsonObject }
+                    val flightStatuses = jsonObject?.get("flightStatuses")?.jsonArray
+                    val dbFsCodesList = getAppendix(jsonObject)
+
+                    db.insertCodes(dbFsCodesList)
+                    var test = dbFsCodesList
 
 
-                    // Mapping
-                    val flightIdMap = flightId.mapNotNull { it.toIntOrNull() }
+                    if (!flightStatuses.isNullOrEmpty()) {
+                        val flightId = getFlightId(flightStatuses)
+                        val carrierIata = getIata(flightStatuses)
+                        val flightNumber = getFlightNumber(flightStatuses)
+                        val departureDt = getLatestDepartureDt(flightStatuses)
+                        val codeShareMap = getCodeshares(flightStatuses)
 
-                    val carrierFsCodeMap = flightId.map { flightId ->
-                        val carrierFsCode = (carrierIata[flightId] ?: "")
 
-                        var code = carrierFsCode
-                        var fixFscode = ""
-                        if (code.contains("*") == true) {
-                            // Handle the case where there was an asterisk
-                            println("Warning: Flight ID $flightId has an asterisk in the carrier code.")
-                            fixFscode = code.replace("*", "")
+                        // Mapping
+                        val flightIdMap = flightId.mapNotNull { it.toIntOrNull() }
 
-                        } else {
-                            fixFscode = code
+                        val carrierFsCodeMap = flightId.map { flightId ->
+                            val carrierFsCode = (carrierIata[flightId] ?: "")
+
+                            var code = carrierFsCode
+                            var fixFscode = ""
+                            if (code.contains("*") == true) {
+                                // Handle the case where there was an asterisk
+                                println("Warning: Flight ID $flightId has an asterisk in the carrier code.")
+                                fixFscode = code.replace("*", "")
+
+                            } else {
+                                fixFscode = code
+                            }
+
+                            "$fixFscode"
+
                         }
 
-                        "$fixFscode"
-
-                    }
-
-                    val flightNumberMap = flightId.map { flightId ->
-                        flightNumber[flightId] ?: ""
-                    }
-
-                    val departureDtMap = flightId.map { flightId ->
-                        departureDt[flightId] ?: ""
-                    }
-
-                    var currentLocalDate = LocalDate.now()
-                    var queryDateListMap = List(flightIdMap.size) { currentLocalDate }
-
-                    val batchTypeList = MutableList(flightIdMap.size) { "" }
-                    batch++
-                    var batchCount = batch
-
-                    for (i in flightIdMap.indices) {
-                        batchTypeList[i] = when (batchCount) {
-                            1 -> "CurrentDateHour0"
-                            2 -> "CurrentDateHour6"
-                            3 -> "CurrentDateHour12"
-                            4 -> "CurrentDateHour18"
-                            5 -> "NextDateHour0"
-                            6 -> "NextDateHour6"
-                            7 -> "NextDateHour12"
-                            8 -> "NextDateHour18"
-                            else -> ""
+                        val flightNumberMap = flightId.map { flightId ->
+                            flightNumber[flightId] ?: ""
                         }
+
+                        val departureDtMap = flightId.map { flightId ->
+                            departureDt[flightId] ?: ""
+                        }
+
+                        var currentLocalDate = LocalDate.now()
+                        var queryDateListMap = List(flightIdMap.size) { currentLocalDate }
+
+                        val batchTypeList = MutableList(flightIdMap.size) { "" }
+                        batch++
+                        var batchCount = batch
+
+                        for (i in flightIdMap.indices) {
+                            batchTypeList[i] = when (batchCount) {
+                                1 -> "CurrentDateHour0"
+                                2 -> "CurrentDateHour6"
+                                3 -> "CurrentDateHour12"
+                                4 -> "CurrentDateHour18"
+                                5 -> "NextDateHour0"
+                                6 -> "NextDateHour6"
+                                7 -> "NextDateHour12"
+                                8 -> "NextDateHour18"
+                                else -> ""
+                            }
+                        }
+
+                        if (batch > 4) {
+                            currentLocalDate = LocalDate.now().plusDays(1)
+                            queryDateListMap = List(flightIdMap.size) { currentLocalDate }
+                        }
+
+                        val dbFlights = Flights(
+                            flightIds = flightIdMap,
+                            carrierFsCode = carrierFsCodeMap,
+                            flightNumber = flightNumberMap,
+                            departureDates = departureDtMap,
+                            queryDate = queryDateListMap,
+                            codeShare = codeShareMap,
+                            batchType = batchTypeList
+                        )
+                        execType++
+                        val currentDateLogs = listOf(LocalDateTime.now().toString())
+                        val flightIdsSizeLogs = listOf(dbFlights.flightIds.size.toString())
+                        val execTypeLogs = listOf(execType.toString())
+
+                        val dbDataLogs = DbDataLogs(
+                            executeDt = currentDateLogs,
+                            dataSize = flightIdsSizeLogs,
+                            execType = execTypeLogs
+                        )
+
+                        //   val  dbFsCodes = DbFsCodes(
+                        // )
+
+                        // Uncomment this line if you want to delete the database
+                        // db.deleteDatabase(context)
+
+                        db.insertFlights(dbFlights)
+                        //db.insertCodes()
+                        db.insertDataLogs(dbDataLogs)
+
+
+                    } else {
+                        println("No flight statuses found in the response.") // Log the absence of flight statuses
                     }
-
-                    if (batch > 4) {
-                        currentLocalDate = LocalDate.now().plusDays(1)
-                        queryDateListMap = List(flightIdMap.size) { currentLocalDate }
-                    }
-
-                    val dbFlights = Flights(
-                        flightIds = flightIdMap,
-                        carrierFsCode = carrierFsCodeMap,
-                        flightNumber = flightNumberMap,
-                        departureDates = departureDtMap,
-                        queryDate = queryDateListMap,
-                        codeShare = codeShareMap,
-                        batchType = batchTypeList
-                    )
-
-                    val currentDate = LocalDateTime.now().toString()
-                    val flightIdsSize = dbFlights.flightIds.size
-                    val execType = "update"
-
-                    val dbDataLogs = DbDataLogs(
-                        executeDt = currentDate,
-                        dataSize = flightIdsSize.toString(),
-                        execType = execType
-                    )
-
-                    //   val  dbFsCodes = DbFsCodes(
-                    // )
-
-                    // Uncomment this line if you want to delete the database
-                    // db.deleteDatabase(context)
-
-                    db.insertFlights(dbFlights)
-                    //db.insertCodes()
-                    db.insertDataLogs(dbDataLogs)
-
-
-                } else {
-                    println("No flight statuses found in the response.") // Log the absence of flight statuses
                 }
-            }
+
         }
         true // Return true if everything went well
     } catch (e: Exception) {
@@ -183,6 +188,8 @@ suspend fun getApiAsync(): List<String?> {
     // Function to make requests for a given date
     suspend fun makeRequestsForDate(date: LocalDate) {
         val currDate = date.format(dateFormat)
+
+        //val currDate = "2025/30/01/"
 
         // Make requests for each hour
         for (reqHours in reqHoursList) {
@@ -220,14 +227,22 @@ suspend fun getApiAsync(): List<String?> {
     return responses // Return the list of responses for both dates
 }
 
-fun isTimeWithinLast60Minutes(dbUpdateDt: LocalDateTime): Boolean {
+fun isDbUpdated(dbUpdateDt: LocalDateTime, execType: String): Boolean {
     // Get the current time
     val currentTime = LocalDateTime.now()
 
-    val thirtyMinutesAgo = currentTime.minusMinutes(60)
+    val sixtyMinutesAgo = currentTime.minusMinutes(60)
+    val isWithinLast60Minutes = !dbUpdateDt.isBefore(sixtyMinutesAgo)
+    val isExecTypeEight = execType == "8"
 
-    return !dbUpdateDt.isBefore(thirtyMinutesAgo)
-}
+    if (isWithinLast60Minutes && isExecTypeEight)
+        {
+            return true
+        } else
+        {
+        return false
+        }
+    }
 
     fun showCustomToast(context: Context, message: String) {
 

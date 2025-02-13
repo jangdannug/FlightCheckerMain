@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.ToneGenerator
 import android.os.Bundle
 import android.os.Handler
@@ -46,8 +47,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var barcodeScanner: BarcodeScanner
     public var scanningPaused = false
 
-    private lateinit var noSeatNumber: TextView
-    private lateinit var test2: TextView
+    private lateinit var alertMessage: TextView
+    private lateinit var detailsFrmDb: TextView
     private lateinit var test3: TextView
 
 
@@ -67,8 +68,8 @@ class MainActivity : AppCompatActivity() {
 
             clearDetails()
 
-            noSeatNumber = findViewById(R.id.noSeatNumber)
-            test2 = findViewById(R.id.test2)
+            alertMessage = findViewById(R.id.alertMessage)
+            detailsFrmDb = findViewById(R.id.detailsFrmDb)
             test3 = findViewById(R.id.test3)
 
             advanceTimeClock = findViewById(R.id.advanceTimeClock)
@@ -153,13 +154,13 @@ class MainActivity : AppCompatActivity() {
                                 val barcodeValue = barcode.rawValue ?: barcode.displayValue
                                 val extractedData = barcodeValue?.let { extractBarcodeData(it) }
                                 if (extractedData != null) {
-                                    ToneGenerator(
-                                        AudioManager.STREAM_MUSIC,
-                                        ToneGenerator.MAX_VOLUME
-                                    ).startTone(
-                                        ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
-                                        150
-                                    )
+                                   // ToneGenerator(
+                                     //  AudioManager.STREAM_MUSIC,
+                                     //   ToneGenerator.MAX_VOLUME
+                                   // ).startTone(
+                                   //     ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
+                                  //      150
+                                  //  )
 
                                     populateBoardingPass(extractedData)
                                 } else {
@@ -183,11 +184,11 @@ class MainActivity : AppCompatActivity() {
 
                                             val db = DataBaseHandler(context)
                                             var code = extractedData.flightIata
-                                           val dataTest = db.getDataByFlightCode(extractedData)
-                                           test2.text = "flightID: ${dataTest?.flightIds}\n " +
-                                                   "CarrierFsCode: ${dataTest?.carrierIata}\n" +
-                                                   "FlightNumber: ${dataTest?.flightNumber}"
-                                            test3.text = "flightDate: ${dataTest?.departureDates}"
+                                           val dataFrmDb = db.getDataByFlightCode(extractedData)
+                                            detailsFrmDb.text = "flightID: ${dataFrmDb?.flightIds}\n " +
+                                                   "CarrierFsCode: ${dataFrmDb?.carrierIata}\n" +
+                                                   "FlightNumber: ${dataFrmDb?.flightNumber}\n" +
+                                            "flightDate: ${dataFrmDb?.departureDates}"
                                             delay(3000)
                                             scanningPaused = false
                                             clearDetails()
@@ -231,24 +232,48 @@ class MainActivity : AppCompatActivity() {
             // Get the current date
             val currentDate = LocalDate.now()
 
+
             // Compare only the date part of the flightDate
          if (barcode.flightDate.isBefore(currentDate)) {
+             alertMessage.text = "EXPIRED TICKET"
+             detailsFrmDb.text = ""
               validationUIResponse(false)
              return false
            }
 
             if (barcode.seatNumber.isNullOrEmpty()) {
-                noSeatNumber.text = "NO SEAT NUMBER"
+                alertMessage.text = "NO SEAT NUMBER"
+                detailsFrmDb.text = ""
                 validationUIResponse(false)
                 return false
            }
 
             if (barcode.seatNumber == "000") {
+                alertMessage.text = "NO SEAT NUMBER"
+                detailsFrmDb.text = ""
                 validationUIResponse(false)
                 return false
             }
         }
         return true
+    }
+
+    private fun playErrorSound() {
+        val mediaPlayer = MediaPlayer.create(this, R.raw.error) // R.raw.error refers to error.mp3
+        mediaPlayer.setVolume(3.0f, 3.0f)
+        mediaPlayer.start()
+        mediaPlayer.setOnCompletionListener {
+            it.release() // Release the MediaPlayer once done
+        }
+    }
+
+    private fun playSuccessSound() {
+        val mediaPlayer = MediaPlayer.create(this, R.raw.success) // R.raw.success refers to success.mp3
+        mediaPlayer.setVolume(1.0f, 1.0f)
+        mediaPlayer.start()
+        mediaPlayer.setOnCompletionListener {
+            it.release() // Release the MediaPlayer once done
+        }
     }
 
 
@@ -287,7 +312,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.WHITE)
         val validationMsg = findViewById<TextView>(R.id.validationMsg)
         validationMsg.text = ""
-        val noSeatNumber = findViewById<TextView>(R.id.noSeatNumber)
+        val noSeatNumber = findViewById<TextView>(R.id.alertMessage)
         noSeatNumber.text = ""
     }
 
@@ -302,9 +327,16 @@ class MainActivity : AppCompatActivity() {
 
             // Get the current year
             val currentYear = LocalDate.now().year
+            val nowJulianDate = LocalDate.now().dayOfYear
+            val adjustedJulianDate = nowJulianDate + 2
 
-            // Calculate the flight date from the Julian date
-            val flightDate = LocalDate.ofYearDay(currentYear, julianDate)
+            val previousYear = if (julianDate > adjustedJulianDate) {
+                currentYear -1
+            } else {
+                currentYear
+            }
+                // Calculate the flight date from the Julian date
+            val flightDate = LocalDate.ofYearDay(previousYear, julianDate)
 
             // Construct IATA flight code
             val flightIata = "$airlineCode${flightNumber.trimStart('0')}"
@@ -343,12 +375,21 @@ class MainActivity : AppCompatActivity() {
                 R.id.rootLayout
             )
 
+
         if (valid) {
             val validationMsg = findViewById<TextView>(R.id.validationMsg)
+            ToneGenerator(
+                AudioManager.STREAM_MUSIC,
+                ToneGenerator.MAX_VOLUME
+            ).startTone(
+                ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
+                150
+            )
             validationMsg.text = "GO!"
             rootLayout.setBackgroundColor(Color.GREEN)
         } else {
             val validationMsg = findViewById<TextView>(R.id.validationMsg)
+            playErrorSound()
             validationMsg.text = "STOP!"
             rootLayout.setBackgroundColor(Color.RED)
         }
